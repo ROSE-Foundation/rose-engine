@@ -22,12 +22,28 @@ prod/
     shared/        # @rose/shared — money/BigInt + decimal-scale utils, glossary enums, error types
     config/        # @rose/config — typed, fail-closed config loader (refuse-if-absent, Zod)
     ledger/        # @rose/ledger — double-entry ledger: schema, reversible migrations, repositories (Drizzle + pg)
-  contracts/       # Solidity / Foundry — custom ERC-3643-compatible token suite
+    rule-spec/     # @rose/rule-spec — single-source rule DSL (Zod), off-chain/on-chain policy codegen, dual-plane conformance vectors
+    authorization/ # @rose/authorization — default-deny authorization provider + the single postTransfer capital-flow chokepoint
+    chain/         # @rose/chain — typed viem clients, event watchers, and the mint/burn dual-write onto the outbox/saga
+    reconcile/     # @rose/reconcile — ledger↔chain reconciliation, correcting the ledger toward the chain (chain is source of truth)
+  contracts/       # Solidity / Foundry — custom ERC-3643-compatible token suite (ONCHAINID identity, atomic paired mint/burn, Model-A bright line, agent powers)
 throwaway/
   mockups/         # historical HTML mockups (surfaces are functional in P0)
 tools/
   check-regime-boundary.mjs   # CI: assert /prod never imports /throwaway
 ```
+
+## Status
+
+P0 vertical slice, built epic by epic (all on-chain/network flows proven locally —
+real Sepolia broadcast is a deferred ops step, no secrets committed):
+
+- **Epic 1 — Foundation & double-entry ledger spine.** ✅ done
+- **Epic 2 — Coupled-pair contract & lifecycle** (incl. Rose Note embedding). ✅ done
+- **Epic 3 — Capital-flow authorization** (single-source rules, default-deny provider, `postTransfer` chokepoint). ✅ done
+- **Epic 4 — On-chain permissioned tokens & compliance** (ERC-3643 on OpenZeppelin: identity, eligibility, atomic paired mint/burn, Model-A, dual-plane conformance, agent powers). ✅ done
+- **Epic 5 — Ledger↔chain integration** (typed clients, outbox/saga dual-write, mint/burn, group view, reconciliation). ✅ done
+- **Epic 6 — Live Rose Note slice & engine surfaces.** ⏳ next
 
 ## Toolchain
 
