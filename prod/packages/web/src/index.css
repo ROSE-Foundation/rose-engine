@@ -1,0 +1,92 @@
+@import 'tailwindcss';
+
+/*
+ * ROSE Engine design system (DESIGN.md). shadcn-on-Tailwind: one brand color (rosé) for
+ * primary actions / active nav / brand marks ONLY; financial semantic tokens (gain/loss/warn/info)
+ * for DATA, always paired with a glyph; `numeric` (tabular mono) for every money/price/qty figure;
+ * `display` for titles + the Group-NAV hero. Both light + dark are first-class. Components reference
+ * these semantic tokens — NEVER raw hex (UX-DR1).
+ */
+
+/* Class-based dark mode (the persisted light/dark toggle flips `.dark` on <html>). */
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  /* Chrome (shadcn-neutral light). */
+  --background: #ffffff;
+  --foreground: #0a0a0a;
+  --card: #ffffff;
+  --card-foreground: #0a0a0a;
+  --muted: #f4f4f5;
+  --muted-foreground: #52525b;
+  --border: #e4e4e7;
+  --ring: #b12a66;
+
+  /* Brand — rosé. Primary actions / active nav / brand marks ONLY (never data). */
+  --primary: #b12a66;
+  --primary-foreground: #ffffff;
+
+  /* Financial semantics (product-critical, not decorative) — DATA only, always with a glyph. */
+  --gain: #1e8e5a;
+  --loss: #c0392b;
+  --warn: #b7791f;
+  --warn-foreground: #1a1208;
+  --info: #2563eb;
+}
+
+.dark {
+  --background: #0a0a0a;
+  --foreground: #fafafa;
+  --card: #141417;
+  --card-foreground: #fafafa;
+  --muted: #1f1f23;
+  --muted-foreground: #a1a1aa;
+  --border: #2a2a30;
+  --ring: #e85c97;
+
+  --primary: #e85c97;
+  --primary-foreground: #1a0e14;
+
+  --gain: #34d399;
+  --loss: #f87171;
+  --warn: #fbbf24;
+  --warn-foreground: #1a1208;
+  --info: #60a5fa;
+}
+
+/* Map the runtime CSS vars into Tailwind's theme so utilities (text-gain, bg-warn, …) follow the
+ * light/dark toggle. `inline` keeps the utilities referencing the live var, not a frozen value. */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+
+  --color-gain: var(--gain);
+  --color-loss: var(--loss);
+  --color-warn: var(--warn);
+  --color-warn-foreground: var(--warn-foreground);
+  --color-info: var(--info);
+
+  /* Type roles. `numeric` = tabular mono for all figures; `display` = sober titles + hero KPI. */
+  --font-numeric: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
+  --font-display: 'Geist Sans', ui-sans-serif, system-ui, sans-serif;
+
+  /* Crisp, instrument-like radii; pill reserved for status badges. */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+}
+
+body {
+  background-color: var(--background);
+  color: var(--foreground);
+  font-family: ui-sans-serif, system-ui, sans-serif;
+}

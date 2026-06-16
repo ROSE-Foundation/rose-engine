@@ -291,3 +291,92 @@ export async function transitionPair(
     return toView(updated);
   });
 }
+
+// ─── Reset re-anchor / re-base (Story 6.4 — strategy execution) ──────────────────────────────
+//
+// ADDITIVE primitive: it re-anchors P₀ and re-bases the leg values when a threshold-only reset is
+// executed by the strategy executor (Story 6.4). It writes ONLY existing columns (no schema change,
+// no new migration) and changes NO existing function. Guarded so it can only run inside the reset
+// window (REBALANCING or PARTIAL — the FR-4 mid-rebalance states) and so it conserves K
+// (V_A + V_B = K — the issuer-neutral invariant the re-base must not break). It does NOT itself
+// transition the lifecycle (the executor drives REBALANCING → ACTIVE via `transitionPair`).
+
+/** Thrown when a reset (re-anchor/re-base) is attempted outside the REBALANCING/PARTIAL window. */
+export class CoupledPairResetStateError extends Error {
+  readonly pairId: string;
+  readonly state: CoupledPairState;
+  constructor(pairId: string, state: CoupledPairState) {
+    super(
+      `Cannot reset coupled pair '${pairId}' in state '${state}': a reset (re-anchor/re-base) is only ` +
+        `permitted while the pair is REBALANCING or PARTIAL (the mid-rebalance reset window).`,
+    );
+    this.name = 'CoupledPairResetStateError';
+    this.pairId = pairId;
+    this.state = state;
+  }
+}
+
+export interface ApplyCoupledPairResetInput {
+  readonly pairId: string;
+  /** New P₀ anchor price (decimal string) — re-anchored to the breach/reset price. */
+  readonly newAnchorPrice: string;
+  /** New V_A long-leg value, integer smallest-units. V_A + V_B MUST equal the (unchanged) K. */
+  readonly newLongLegValue: bigint;
+  /** New V_B short-leg value, integer smallest-units. */
+  readonly newShortLegValue: bigint;
+}
+
+/**
+ * Re-anchors P₀ and re-bases the leg values of a coupled pair at a threshold-only reset (Story 6.4).
+ * Runs in a row-locking transaction (`SELECT … FOR UPDATE`) so the read-check-write is atomic.
+ * Refuses unless the pair is in the reset window (`REBALANCING`/`PARTIAL`) with `CoupledPairResetStateError`;
+ * validates the frozen field types (positive decimal anchor at the frozen scale, non-negative integer
+ * leg values) like `createCoupledPair`; and asserts `newLongLegValue + newShortLegValue === K`
+ * (collateral pool unchanged — the conservation invariant) with `InvalidCoupledPairError`. Advances
+ * `updated_at`. Accepts a `RoseExecutor` so it can run inside an outer transaction. ADDITIVE — it
+ * changes no existing function, schema, or migration (writes only existing columns).
+ */
+export async function applyCoupledPairReset(
+  db: RoseExecutor,
+  input: ApplyCoupledPairResetInput,
+): Promise<CoupledPairView> {
+  assertPositiveDecimal('newAnchorPrice', input.newAnchorPrice);
+  assertMaxFractionalDigits('newAnchorPrice', input.newAnchorPrice, ANCHOR_PRICE_MAX_SCALE);
+  assertNonNegativeUnits('newLongLegValue', input.newLongLegValue);
+  assertNonNegativeUnits('newShortLegValue', input.newShortLegValue);
+
+  return db.transaction(async (tx) => {
+    const [current] = await tx
+      .select()
+      .from(coupledPairs)
+      .where(eq(coupledPairs.id, input.pairId))
+      .for('update');
+    if (!current) {
+      throw new CoupledPairNotFoundError(input.pairId);
+    }
+    if (current.state !== 'REBALANCING' && current.state !== 'PARTIAL') {
+      throw new CoupledPairResetStateError(input.pairId, current.state);
+    }
+    const k = numericToBigInt(current.collateralPool);
+    if (input.newLongLegValue + input.newShortLegValue !== k) {
+      throw new InvalidCoupledPairError(
+        `Reset re-base must conserve K: V_A (${input.newLongLegValue}) + V_B (${input.newShortLegValue}) ` +
+          `!= K (${k}).`,
+      );
+    }
+    const [updated] = await tx
+      .update(coupledPairs)
+      .set({
+        anchorPrice: input.newAnchorPrice,
+        longLegValue: input.newLongLegValue.toString(),
+        shortLegValue: input.newShortLegValue.toString(),
+        updatedAt: sql`now()`,
+      })
+      .where(eq(coupledPairs.id, input.pairId))
+      .returning();
+    if (!updated) {
+      throw new Error('Coupled-pair reset update returned no row.');
+    }
+    return toView(updated);
+  });
+}

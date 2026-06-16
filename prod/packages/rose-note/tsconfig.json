@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "references": [
+    { "path": "../ledger" },
+    { "path": "../authorization" },
+    { "path": "../chain" },
+    { "path": "../shared" },
+    { "path": "../config" },
+    { "path": "../reconcile" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

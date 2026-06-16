@@ -26,6 +26,9 @@ prod/
     authorization/ # @rose/authorization — default-deny authorization provider + the single postTransfer capital-flow chokepoint
     chain/         # @rose/chain — typed viem clients, event watchers, and the mint/burn dual-write onto the outbox/saga
     reconcile/     # @rose/reconcile — ledger↔chain reconciliation, correcting the ledger toward the chain (chain is source of truth)
+    rose-note/     # @rose/rose-note — Rose Note composition layer: subscription, redemption & coupled-pair strategy execution (paper/testnet)
+    api/           # @rose/api — typed REST boundary (Fastify + Zod + OpenAPI): read + subscribe/redeem/strategy write endpoints
+    web/           # @rose/web — operator & subscriber surfaces (React + Vite + Tailwind v4 + TanStack Query) on the OpenAPI-typed contract
   contracts/       # Solidity / Foundry — custom ERC-3643-compatible token suite (ONCHAINID identity, atomic paired mint/burn, Model-A bright line, agent powers)
 throwaway/
   mockups/         # historical HTML mockups (surfaces are functional in P0)
@@ -43,7 +46,12 @@ real Sepolia broadcast is a deferred ops step, no secrets committed):
 - **Epic 3 — Capital-flow authorization** (single-source rules, default-deny provider, `postTransfer` chokepoint). ✅ done
 - **Epic 4 — On-chain permissioned tokens & compliance** (ERC-3643 on OpenZeppelin: identity, eligibility, atomic paired mint/burn, Model-A, dual-plane conformance, agent powers). ✅ done
 - **Epic 5 — Ledger↔chain integration** (typed clients, outbox/saga dual-write, mint/burn, group view, reconciliation). ✅ done
-- **Epic 6 — Live Rose Note slice & engine surfaces.** ⏳ next
+- **Epic 6 — Live Rose Note slice & engine surfaces** (typed REST API, live subscription/redemption, paper strategy execution, Covenant Console + coupled-pair + exchange/trading + subscriber surfaces). ✅ done
+- **Epic 7 — Coupled-coin model validation** (throwaway trial: reference math, threshold-only rebalancing simulator). ⏳ next
+
+> The real Sepolia broadcast (deploy + live mint/burn/subscription confirmation) is a
+> deferred ops step gated on out-of-band secrets; all on-chain flows are proven locally
+> (Foundry EVM + mock transports). No secrets are committed.
 
 ## Toolchain
 

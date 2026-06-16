@@ -788,3 +788,176 @@ New: `prod/packages/reconcile/{package.json,tsconfig.json,src/index.ts,src/group
 ## Epic-6 interface notes
 
 `reconcileLedgerToChain` (on-demand/per-event entry point), `ReconcilePlan`/`TokenCorrectionAccounts` (caller-supplied snapshot + holder/contra topology to derive from a persisted mapping), `ReconciliationReport`/`renderReconciliationText`/`serializeReconciliationReport` (audit surface for Covenant Console/API), and `isFinal`/`classifyChainEventFinality`/`shouldReconcileOnEvent` (cadence decision to wire to `watchPairEvents`/`getPastPairEvents` + a funded RPC — ops-deferred).
+
+---
+
+# BMAD Pipeline Report — Story 6-1 (Epic 6) — 2026-06-16
+
+**Story:** `6-1-expose-the-typed-rest-api-boundary-fastify-zod-openapi`
+**Final status:** **done** · **Epic 6:** `backlog → in-progress`
+**Pipeline:** create-story → dev-story → code-review (autonomous, no user checkpoints).
+
+## What was built — new package `@rose/api` (`prod/packages/api`)
+
+The typed REST boundary (Fastify + Zod + OpenAPI), FR-14 foundation, that Stories 6.2→6.6 branch onto.
+
+- `buildApp(deps)` — Fastify factory with `fastify-type-provider-zod` (validator + serializer compilers) and `@fastify/swagger`; the Zod request/response schemas are the SINGLE source from which the OpenAPI 3.1 document is derived. Dependencies (`RoseDb`, optional `ChainSupplySnapshot`, OpenAPI info, logger) are INJECTED — the app opens no DB pool and no socket; exercised in-process via `app.inject`.
+- Base READ-ONLY endpoints: `GET /health`, `GET /group-view` (consolidated group view via `@rose/reconcile`; optional injected chain-supply → divergence/`ledger+chain`), `GET /coupled-pairs/:id` (UUID-validated → 200/404), `GET /rose-notes/:id` (→ 200/404), `GET /openapi.json`.
+- Structured-error contract `{ error: { code, message, details? } }` via one `mapErrorToResponse` translator + exported `installErrorHandling`: authorization `TransferRefusedError` `DENY`→403 / `REFUSE`→422 (named rule via `reason`), domain→422, invariant/idempotency→409, not-found→404, refuse-if-absent config→503, Zod→400, unknown→500 (generic, non-leaking).
+- Money as decimal strings end-to-end (NFR-2): `MoneySchema` strings; coupled-pair K/V_A/V_B as raw smallest-unit integer strings; group view via `groupViewToJson`. No JS number/float, no bigint over the wire.
+
+### Files
+
+- NEW: `prod/packages/api/{package.json,tsconfig.json}`, `src/{index,app,errors,schemas,serializers}.ts`, `src/routes/{health,group-view,coupled-pairs,rose-notes,openapi}.ts`, `src/{errors,serializers,app,index}.test.ts`.
+- MODIFIED: root `tsconfig.json` (+api reference), `pnpm-lock.yaml`, `_bmad-output/implementation-artifacts/{deferred-work.md,sprint-status.yaml}`, the story file.
+
+### Dependencies declared (package.json + pnpm-lock.yaml)
+
+`fastify ^5.8.5`, `fastify-type-provider-zod ^5.1.0` (zod>=3.25.67 — workspace zod 3.25.76, imported via `zod/v4`), `@fastify/swagger ^9.7.0`, `openapi-types ^12.1.3`, `zod ^3.25.0`; workspace `@rose/ledger`, `@rose/reconcile`, `@rose/shared`. NO `@rose/chain`/`viem` edge.
+
+## Gates (all green)
+
+- `pnpm test`: **478 passed** (baseline 432 → +46 in `@rose/api`). Tests are LOCAL/in-process: local docker Postgres (5544) for ledger reads + Fastify `app.inject` (no socket) + synthetic in-memory `ChainSupplySnapshot`. **No Sepolia, no network port, no key.**
+- `pnpm typecheck`, `pnpm lint`, `pnpm format:check`, `pnpm check:regime`: green.
+- `pnpm check:migrations`: **7 reversible** (unchanged — read-only story, no new migration).
+- `forge`: **171** unchanged (no Solidity touched).
+- DB reset to seeded state after review.
+
+## Code-review notable decisions
+
+- 2 regression tests added: NFR-2 precision survives the FULL Fastify serialize path (a `2^53+1` magnitude served as exact string); the injected `ChainSupplySnapshot` seam over HTTP (`source: ledger+chain` + divergence).
+- 2 forward boundaries deferred (deferred-work.md story-6.1): **API-level authn/authz** (out of 6.1 ACs; surfaces 6.5/6.6 + ingress own it; nothing network-exposed in P0); **coupled-pair magnitudes as scale-less integer strings** (the reviewed 5.5 precedent, revisable).
+- 1 dismissed: name-keyed registry name-collision (names unique in practice; keeps the boundary decoupled).
+- Resolved a story-3.4 deferred concern: config refuse-if-absent faults map to a typed **503**, not an opaque 500.
+
+## No secret created
+
+No `.env`, no `SEPOLIA_RPC_URL`/key/address, no placeholder RPC. The real Sepolia-backed `/group-view` and the real listen-port composition are ops-deferred.
+
+## Interfaces for 6.2 → 6.6
+
+- `buildApp`/`ApiDeps` (inject `RoseDb` + optional `ChainSupplySnapshot`; add write routes later).
+- `installErrorHandling`/`mapErrorToResponse`/`ApiError`/`NotFoundError` — the structured-error contract the write paths surface refusals through (registry already covers mint/burn/transfer/lifecycle error classes).
+- Zod schemas (`MoneySchema`/`CoupledPairSchema`/`RoseNoteSchema`/`GroupViewSchema`/`ErrorResponseSchema`) — the OpenAPI-typed JSON the React/Vite surfaces consume.
+- `serializeCoupledPair`/`serializeRoseNote` — bigint→string / Date→ISO money-safe serializers.
+
+---
+
+# Story 6-2 — Live subscription to a Rose Note end-to-end (testnet/paper)
+
+**Final status:** done. Full BMAD cycle (create-story → dev-story → code-review) completed autonomously.
+
+**Network perimeter (honored, strict):** LOCAL/paper only. NO `.env`, NO secret, NO placeholder, NO real Sepolia. The paired mint is exercised through a mock EIP-1193 transport + injected seam wallet; the `PairMinted` confirmation is a synthetic confirmed event; the eligibility allowlist stands in for the on-chain ONCHAINID claim. Real broadcast + real ONCHAINID read recorded as ops-deferred (deferred-work.md story-6.2).
+
+## What was built
+
+- **NEW `@rose/rose-note`** (`prod/packages/rose-note`) — the architecture-mandated FR-11 composition layer (`api → rose-note → chain → ledger → reconcile`): `makeSubscriptionService` (eligibility FR-19 + default-deny capital-flow authorization, both fail-closed BEFORE any write → 5.3 `MintPairDualWrite` → on-chain commit point posts ONE balanced journal entry incl. `NOTE_LIABILITY`, idempotent NFR-9, no optimistic success); `makeAllowlistEligibilityProvider`/`IneligibleSubscriberError`; `buildSubscriptionMintPlan` (holder=ASSET, supply=non-ASSET, value books `NOTE_LIABILITY`); `makeProviderAuthorizeGate`.
+- **`@rose/api` write boundary** — `POST /rose-notes/:id/subscriptions` + `GET /subscriptions/:id` via an injected `SubscriptionService` port (`ApiDeps.subscriptions?`); money as smallest-units STRINGS (NFR-2); OpenAPI derived from new Zod schemas; the structured-error registry extended (eligibility→403, idempotency/lifecycle→409, unsupported-asset/bad-amount→422, service-absent→503; `MintAuthorizationError` DENY→403 effect split). `@rose/api` gains a `@rose/rose-note` edge but NO direct `@rose/chain`/`viem` edge.
+
+## Gates (final)
+
+- **Vitest 519** (baseline 478 → +41: rose-note eligibility/plan/authorize-gate/subscribe e2e + api subscriptions/errors, incl. +8 code-review regression tests). Tests are LOCAL/paper (local docker Postgres + mock EIP-1193 + synthetic `PairMinted`), NOT Sepolia.
+- **forge 171/171** unchanged (no Solidity touched). **migrations 7** reversible/unchanged (no new migration — subscription state derived from the outbox row).
+- `pnpm typecheck` / `lint` / `format:check` / `check:regime` all green.
+
+## Code-review (3 adversarial lenses)
+
+Acceptance Auditor full PASS on AC-1/AC-2/AC-3 (Review→Confirm UI deferred to 6.5/6.6). 6 real findings FIXED + 8 regression tests: (1) `operationKind === 'PAIR_MINT'` + payload-shape guard (a burn/other key no longer reads as a malformed subscription → 500); (2) reused-idempotency-key-with-different-request → 409 (`SubscriptionIdempotencyConflictError`, no silent stranger-position); (3) `confirm` never throws into the fire-and-forget watcher; (4) `MintAuthorizationError`/`BurnAuthorizationError` DENY→403 / REFUSE→422 effect split (UX-DR5); (5) terminal-failure surfacing (`SubscriptionStatus` widened to `failed`); (6) non-positive amount rejected at the boundary (400). 2 deferred/dismissed with rationale (caller-supplied topology classification = 5.3 trust boundary; `roseNoteId` empty-string unreachable for a real subscription).
+
+## Confirmation
+
+NO secret / `.env` / placeholder created. NO git commit.
+
+## Interfaces for 6.3 → 6.6
+
+- `@rose/rose-note`: `makeSubscriptionService`/`SubscriptionService`/`SubscriptionView`/`SubscribeInput` (6.3 redemption mirrors this against the 5.4 burn dual-write); `EligibilityProvider`/`makeAllowlistEligibilityProvider`; `buildSubscriptionMintPlan`/`SubscriptionAccountTopology`; `makeProviderAuthorizeGate`.
+- `@rose/api`: `ApiDeps.subscriptions` injected port; `SubscribeRequestSchema`/`SubscriptionSchema`/`SubscriptionStatusSchema`; the extended error registry (the surfaces 6.5/6.6 consume the OpenAPI-typed JSON and drive the pending → confirmed lifecycle via the Review→Confirm + pending pattern UX-DR6).
+
+---
+
+## Story 6-3 — Live redemption of a Rose Note (FR-11) — DONE
+
+**Cycle:** create-story → dev-story → code-review, autonomous. **Status: done.** Branch `feat/epic-3-capital-flow-authorization`, NO git commits.
+
+**Network perimeter (strict, honoured):** PAPER/LOCAL only — local docker Postgres (5544), Fastify `app.inject`, on-chain paired burn via mock EIP-1193 transport, confirmation via synthetic `PairBurned`. NO Sepolia, NO listen port, NO key, NO `.env`, NO placeholder created. Real `burnPair` broadcast + live `PairBurned` cadence + the on-chain over-redemption revert recorded as ops-deferred (`deferred-work.md` story-6.3).
+
+**What was built (the INVERSE mirror of the 6.2 subscription, against the 5.4 burn):**
+
+- `@rose/rose-note` (existing package, no new dep/edge): `buildRedemptionBurnPlan` (`redemption-plan.ts`) — holder=ASSET / supply=non-ASSET quantity legs + value leg that DEBITs (extinguishes) `NOTE_LIABILITY` and CREDITs cash (the inverse of the subscription value leg); `makeRedemptionService` (`redeem.ts`) — default-deny capital-flow authorization pre-write → 5.4 `BurnPairDualWrite` → at the on-chain commit point ONE balanced journal entry RETIRING the quantity (holder CREDIT / supply DEBIT from the confirmed on-chain amount, D3/NFR-9) + extinguishing `NOTE_LIABILITY`; idempotent, no optimistic success, confirm-never-throws, row-kind guard (`PAIR_BURN`). Reuses `RoseNoteNotFoundError`/`UnsupportedPaymentAssetError`. Deliberate asymmetry: redemption does NOT consult FR-19 eligibility (token-receipt gate, not a burn).
+- `@rose/api`: `POST /rose-notes/:id/redemptions` + `GET /redemptions/:id` (`routes/redemptions.ts`) via injected `ApiDeps.redemptions?` port; `RedeemRequestSchema`/`RedemptionSchema`/`RedemptionStatusSchema`/`RedemptionIdParamSchema` (money as integer strings, NFR-2); error registry extended (`RedemptionPairNotActiveError`/`RedemptionIdempotencyConflictError`→409, `InvalidRedemptionAmountError`→422; `BurnAuthorizationError` DENY→403/REFUSE→422 split exercised); service-absent→503.
+
+**Gate (all green, LOCAL/paper — not Sepolia):** Vitest 519→554 (+35), `pnpm typecheck`/`lint`/`format:check`/`check:regime` clean, `pnpm check:migrations` 7 reversible (no new migration), `forge test` 171/171 (no Solidity touched). DB left migrated+seeded.
+
+**Code review:** 3 lenses, full acceptance PASS; 1 finding strengthened with a regression test (divergent confirm ⇒ still-pending, posts nothing); 4 documented design/deferral decisions. No residual High/Med correctness risk. No secret created.
+
+**Interfaces for 6.4→6.6:** `makeRedemptionService`/`RedemptionService`/`RedemptionView`/`RedeemInput`; `buildRedemptionBurnPlan`/`RedemptionAccountTopology`; `@rose/api` `RedeemRequestSchema`/`RedemptionSchema` + `ApiDeps.redemptions` injected port + extended error registry (the surfaces consume the OpenAPI-typed JSON and drive the pending/confirmed → position-closes lifecycle).
+
+---
+
+## Story 6-4 — Execute coupled-pair strategy in paper/testnet mode (FR-20, NFR-7)
+
+**Final status:** done. Pipeline: create-story → dev-story → code-review, all auto-approved on green gates.
+
+**What shipped (paper/local execution, not model validation):** a `StrategyExecutor` port (the NFR-7 seam) in `@rose/rose-note` — `makeStrategyExecutor` (`onTick` / `confirmReset` / `getReset`). `onTick` is the **threshold-only** trigger (floor `f = m·L·g`, `floorUnits = ⌊(K/2)·f⌋`; `m`/`g` from `@rose/config` refuse-if-absent, `L` from the pair row): a within-barrier tick is a strict no-op, **NEVER a clock** (no timer/interval/scheduler/`Date` in the decision path). A floor breach drives the 5.4 paired-burn dual-write (fail-closed authorization pre-write; submit then `ACTIVE→REBALANCING`); at the on-chain commit point `confirmReset` posts ONE balanced journal entry crystallizing the realized P&L tagged to `TRADING_CO` (accrues to the group NAV, AC-1), re-bases the pair (`applyCoupledPairReset`: re-anchor P₀, `V_A=V_B=K/2`, K conserved) and returns it to `ACTIVE`. `@rose/api` `POST /coupled-pairs/:id/strategy/ticks` + `GET /strategy/resets/:id` via an injected `ApiDeps.strategy?` port. The Epic-7 coupled-coin reference math + simulator are NOT reimplemented in `/prod` (marks are opaque tick inputs; `check:regime` green).
+
+**Files:** new `strategy.ts`/`strategy-plan.ts` (+ tests) in `@rose/rose-note`, additive `applyCoupledPairReset` in `@rose/ledger` `coupled-pairs.ts` (+ `coupled-pair-reset.test.ts`), new `routes/strategy.ts` (+ `strategy.test.ts`) + `schemas.ts`/`app.ts`/`errors.ts`/`index.ts` edits in `@rose/api`; `@rose/config` test-only devDep on `@rose/rose-note`.
+
+**Gate (all green, LOCAL/paper — not Sepolia):** Vitest **554 → 594**, `forge` 171/171 (no Solidity), migrations 7 reversible (no new migration), typecheck/lint/format/check:regime clean. Tests use local Postgres + mock EIP-1193 + synthetic `PairBurned` + provided ticks; NO Sepolia, NO key, NO `.env`, NO real price feed.
+
+**Code review:** 3 lenses (Blind / Edge-Case / Acceptance). Full acceptance PASS on AC-1…AC-4; AC-5 PASS with the realized-P&L value postings collapsed into the `TRADING_CO` tag pair (D1a-parked). **3 correctness Highs FIXED** (all "stranded REBALANCING" hazards): validate `tick.price` up-front; submit before the lifecycle transition; widen the `confirmReset` re-base guard to recover on re-delivery — plus a Med (truthful FAILED-row reporting). +3 regression tests. 4 items documented/deferred (settlement/withdrawable split → D1a; both-legs under-count → Epic-7 model; reset-vs-redemption `PAIR_BURN` routing → 6.6; reset-key reuse → caller namespace). No residual High/Med risk. No secret created.
+
+**Interfaces for 6.5/6.6:** `@rose/rose-note` `makeStrategyExecutor`/`StrategyExecutor`/`StrategyTick`/`StrategyTickOutcome`/`StrategyResetView` (6.6 Exchange/Trading consumes the pending/confirmed reset lifecycle + realized P&L by entity); `buildStrategyResetBurnPlan`/`StrategyResetTopology`/`deriveFloorUnits`; `@rose/ledger` `applyCoupledPairReset` (the re-anchored/re-based pair the 6.5 Coupled-Pair surface renders as live `V_A`/`V_B`/`anchor`); `@rose/api` `StrategyTick*Schema`/`StrategyResetSchema` + `ApiDeps.strategy` injected port + extended error registry.
+
+---
+
+## Story 6-5 — Covenant Console & Coupled-Pair surfaces on live data (2026-06-16)
+
+**Pipeline:** create-story → dev-story → code-review (autonomous, single story). **Final status: DONE.**
+
+### Outcome
+
+NEW workspace package **`@rose/web`** (React 18 + Vite + TypeScript + Tailwind v4 + TanStack Query) delivering the design system + shared data-product components + the **Covenant Console** and **Coupled-Pair** operator surfaces on live `@rose/api` data. Frontend-only: the sole backend change is a one-line **additive, type-only** re-export of `GroupViewResponse` from `@rose/api` (runtime-inert; keeps the Zod schema the single contract source and the import fully erased so Fastify never enters the browser bundle).
+
+### Surfaces & components
+
+- Design system: DESIGN.md tokens as semantic CSS vars (rosé `--primary` brand/actions only; `--gain/--loss/--warn/--info` data; `numeric` tabular-mono + `display` roles) mapped into Tailwind v4 (`@theme inline`) so utilities follow a **persisted light/dark toggle**. No raw hex in components.
+- Shared (TDD'd, reused by 6.6): `MoneyCell` (decimal-string only, never `number`/float, unit+scale `aria-label`), `DeltaIndicator` (sign+glyph+color), `StatusBadge` (6 lifecycle + live/divergent/pending, label-bearing), `LiveIndicator` (stale-flip + `aria-live`), `DivergenceBanner` (FR-10), `StatCard`, `CopyTxHash`, plus `Button/Card/Table/Skeleton`.
+- Covenant Console: live group NAV hero, per-entity balances table, float-yield/exposure derived (BigInt), entity switcher, divergence banner, account drill + copy-tx-hash, loading/empty/error states.
+- Coupled-Pair: live `V_A/V_B/K/floor/anchor/leverage`, `V_A+V_B=K` invariant, exact BigInt distance-to-floor (warn near/breached), lifecycle badge, live indicator, states.
+
+### Code review (3 adversarial layers, self-run — no subagent tool in env)
+
+- **1 patch (applied):** `sumNetByType` summed unlike-asset units across a type → restricted to the dominant asset/scale; regression test added.
+- **5 deferred (recorded in `deferred-work.md`):** deep drill journal-entry→tx-hash + divergence correcting-entry link need NEW `@rose/api` read endpoints (backend, out of frontend scope); current `P` awaits the 6.4 price-feed seam; WCAG 2.2 AA contrast audit (design-QA); multi-asset KPI breakdown; SR alert-politeness refinement.
+- **3 dismissed** as noise (documented floor flooring, intended disabled-query path, unbound default fetch).
+
+### Gates (LOCAL / paper — NO Sepolia, NO secret)
+
+- `pnpm test`: **633 passed** (594 baseline + 39 new web tests; web tests need no Postgres/network).
+- `pnpm typecheck` · `pnpm lint` · `pnpm format:check` · `pnpm check:regime` · `pnpm check:migrations` (7 reversible): all green.
+- `forge test`: **171 passed** (no Solidity touched). Migrations unchanged.
+- Tests are LOCAL component tests (jsdom + testing-library) against typed fixtures shaped by the `@rose/api` contract — no real network, no `.env`, no secret created.
+
+### Interfaces for 6-6 (last epic-6 story)
+
+- Reuse the `@rose/web` design system + every shared component (`MoneyCell`/`DeltaIndicator`/`StatusBadge`/`LiveIndicator`/`DivergenceBanner`/`StatCard`/`CopyTxHash`/`EntitySwitcher`), the typed `ApiClient` + TanStack Query hooks pattern, the `import type` contract-types module, and the jsdom test harness (`src/test/setup.ts` + fixtures).
+- 6-6 adds the Exchange/Trading view (paper execution/positions/P&L by entity) + the responsive Subscriber surfaces (subscribe/redeem via Review→Confirm + pending, eligibility gate) — the write/mutation flows 6.5 deliberately did NOT build. The `@rose/api` write endpoints (subscriptions/redemptions/strategy) already exist from 6.2–6.4.
+
+---
+
+## Story 6-6 — Exchange/Trading and Subscriber surfaces on live data (DONE — LAST epic-6 story)
+
+**Pipeline:** create-story → dev-story → code-review, fully autonomous. Status `backlog → ready-for-dev → in-progress → review → done`. **`epic-6: done`** (all of 6-1…6-6 done). Branch `feat/epic-3-capital-flow-authorization`; baseline `NO_VCS`; **no git commit made**.
+
+**Delivered (frontend-only, reusing the 6.5 design system):**
+
+- **Exchange/Trading surface** (operator desktop, `src/surfaces/exchange-trading/`) — derives live paper/testnet execution, positions (`DEPLOYED_CAPITAL`), and realized P&L (`FEE_INCOME`) **by entity** from the group view + the open `coupledPairs[]` legs; `MoneyCell`/`DeltaIndicator`/`LiveIndicator`/`StatusBadge`; explicit loading/empty/error. No mockups.
+- **Subscriber surfaces** (responsive `max-w-2xl`, `src/surfaces/subscriber/`) — positions list → Note detail (live position + embedded pair via the **reused `CoupledPairView`**) → subscribe/redeem behind the eligibility gate + the new `ConfirmActionPanel`. **Pessimistic Review→Confirm + pending** (UX-DR6/NFR-9): Confirm fires the mutation, then polls `GET /subscriptions|redemptions/:id` until `confirmed` — **no optimistic success**. Typed refusals (403/422/409/503) name the rule (UX-DR5). Eligibility gate gives an explicit named reason (FR-19, no self-service KYC).
+- **Client/hooks:** extended `ApiClient` (`subscribe`/`redeem`/`getSubscription`/`getRedemption`/`getRoseNote` + a `post` helper sharing the typed-error parser); `useSubscribe`/`useRedeem` mutations + `useSubscription`/`useRedemption` poll-while-pending hooks. Amounts cross as smallest-units **integer strings** (NFR-2, no float).
+- **`@rose/api`:** ONE additive **TYPE-ONLY** re-export (`SubscriptionResponse`/`RedemptionResponse`/`SubscribeRequest`/`RedeemRequest`) — runtime-inert, mirrors the 6.5 `GroupViewResponse` precedent. No new schema/logic/migration/Solidity.
+
+**Code-review (3 adversarial lenses):** 1 patch applied — Exchange/Trading P&L `DeltaIndicator` double-signed a **negative** net (`▾ −-1250.00`) because the label passed the signed decimal; fixed with a `magnitude()` strip + a `tradingLossGroupView()` regression test. 2 deferred (empty-amount/address → typed 400 in paper/local; WCAG token-hex contrast audit carry-over from 6.5), 3 dismissed as noise.
+
+**Gates (LOCAL, paper — no Sepolia):** `pnpm test` **656 passed** (633 baseline + 23 new web tests; no Postgres/network for the web tests) · `typecheck`/`lint`/`format:check` green · `check:regime` green · `check:migrations` 7 reversible · `forge test` **171 passed**. **Zero new dependencies.** **No `.env`, no secret, no placeholder** created (the subscriber address is an env var with an empty default).
+
+**Epic 6 complete.** Residual ops/backend follow-ups (all recorded in `deferred-work.md`, none blocking): real Subscriber session auth carrying the ONCHAINID eligibility claim; the deployed API base URL + CORS + live polling/websocket cadence; the on-chain commit point that actually flips `pending → confirmed` on **real Sepolia**; a "list my positions" + a per-execution Exchange/Trading read endpoint.

@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-15
-last_updated: 2026-06-16T23:45
+last_updated: 2026-06-16T23:55
 project: rose-engine
 project_key: NOKEY
 tracking_system: file-system
@@ -89,13 +89,13 @@ development_status:
   epic-5-retrospective: optional
 
   # Epic 6: Live Rose Note Slice & Engine Surfaces
-  epic-6: backlog
-  6-1-expose-the-typed-rest-api-boundary-fastify-zod-openapi: backlog
-  6-2-live-subscription-to-a-rose-note-end-to-end-testnet-paper: backlog
-  6-3-live-redemption-of-a-rose-note: backlog
-  6-4-execute-coupled-pair-strategy-in-paper-testnet-mode: backlog
-  6-5-covenant-console-and-coupled-pair-surfaces-on-live-data: backlog
-  6-6-exchange-trading-and-subscriber-surfaces-on-live-data: backlog
+  epic-6: done
+  6-1-expose-the-typed-rest-api-boundary-fastify-zod-openapi: done
+  6-2-live-subscription-to-a-rose-note-end-to-end-testnet-paper: done
+  6-3-live-redemption-of-a-rose-note: done
+  6-4-execute-coupled-pair-strategy-in-paper-testnet-mode: done
+  6-5-covenant-console-and-coupled-pair-surfaces-on-live-data: done
+  6-6-exchange-trading-and-subscriber-surfaces-on-live-data: done
   epic-6-retrospective: optional
 
   # Epic 7: Coupled-Coin Model Validation — The Trial (Throwaway)
