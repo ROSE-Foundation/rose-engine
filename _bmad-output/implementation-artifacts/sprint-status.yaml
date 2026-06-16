@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-15
-last_updated: 2026-06-16T21:15
+last_updated: 2026-06-16T23:45
 project: rose-engine
 project_key: NOKEY
 tracking_system: file-system
@@ -79,13 +79,13 @@ development_status:
   epic-4-retrospective: optional
 
   # Epic 5: Ledger↔Chain Integration — Mint, Burn & Reconciliation
-  epic-5: backlog
-  5-1-connect-to-sepolia-via-typed-viem-clients-and-event-watchers: backlog
-  5-2-implement-the-outbox-saga-dual-write-with-the-on-chain-tx-as-commit-point: backlog
-  5-3-mint-paired-erc-3643-l-s-tokens-on-sepolia-and-record-them-in-the-ledger: backlog
-  5-4-burn-the-coupled-token-package-on-redemption-with-matching-ledger-entries: backlog
-  5-5-produce-the-consolidated-group-view-text-json: backlog
-  5-6-reconcile-ledger-chain-and-correct-the-ledger-toward-the-chain: backlog
+  epic-5: done
+  5-1-connect-to-sepolia-via-typed-viem-clients-and-event-watchers: done
+  5-2-implement-the-outbox-saga-dual-write-with-the-on-chain-tx-as-commit-point: done
+  5-3-mint-paired-erc-3643-l-s-tokens-on-sepolia-and-record-them-in-the-ledger: done
+  5-4-burn-the-coupled-token-package-on-redemption-with-matching-ledger-entries: done
+  5-5-produce-the-consolidated-group-view-text-json: done
+  5-6-reconcile-ledger-chain-and-correct-the-ledger-toward-the-chain: done
   epic-5-retrospective: optional
 
   # Epic 6: Live Rose Note Slice & Engine Surfaces

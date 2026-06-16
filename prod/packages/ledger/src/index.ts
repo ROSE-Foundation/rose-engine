@@ -8,3 +8,4 @@ export * from './repositories/coupled-pairs.js';
 export * from './repositories/journal-entries.js';
 export * from './repositories/issuance.js';
 export * from './repositories/rose-notes.js';
+export * from './repositories/outbox-events.js';

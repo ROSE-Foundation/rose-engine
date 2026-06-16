@@ -542,3 +542,249 @@ Vitest **302/302** (unchanged — no TS touched). forge **171/171** (baseline 12
 - **Role model post-deploy:** `finalOwner` owns every contract and is the only caller of `mintPair`/`burnPair` (the Epic-5 mint/burn commit point); the `identityAgent` registers holders on the IdentityRegistry (Story 5.x onboarding); the `transferAgent` holds the agent powers on both legs (forced transfer / recovery / freeze / pause).
 - **Recovery & forced transfer** are now available for Epic 5/6 reconciliation + lifecycle operations (e.g., relocating a holder's coupled position to a new wallet) without breaking the coupling supply invariant or the Model-A principal segregation.
 - **Mint/burn during pause:** owner `mintPair`/`burnPair` and agent forced ops keep working while the token is paused — so an Epic-5 reconciliation/incident pause does not block the issuer's authoritative supply operations.
+
+---
+
+# BMAD Pipeline — Story 5.1 (Epic 5, single-story run, 2026-06-16)
+
+**Story:** `5-1-connect-to-sepolia-via-typed-viem-clients-and-event-watchers` — Connect to Sepolia via typed viem clients and event watchers.
+**Final status:** `done`. Epic 5 moved `backlog → in-progress` (first story created). No git commits made.
+
+## Pipeline executed (create-story → dev-story → code-review)
+
+1. **create-story** — drafted the story file with full architecture/context (chain package location, viem 2.52, chain boundary, NFR-9/D3, refuse-if-absent reference, epic-4 event/ABI sources). `epic-5 → in-progress`, story `→ ready-for-dev`.
+2. **dev-story** — implemented `@rose/chain` (see below). `→ review`.
+3. **code-review** — 3 parallel adversarial layers; 7 patches applied, 2 deferred, 4 dismissed. `→ done`.
+
+## What shipped — `prod/packages/chain` (`@rose/chain`), all TypeScript
+
+- **Typed viem clients** (`src/viem-clients.ts`): `createRoseChainClients(config, opts?)` → typed `publicClient` on the `sepolia` chain + a `getWalletClient(account)` factory **seam** (no key handling — that is 5.3/5.4). Injectable `transport`/`pollingInterval` for local tests. `readTokenBalance`/`readTotalSupply` return typed `bigint` (NFR-2) via `readContract`.
+- **Typed event watchers** (`src/watchers.ts`): `watchPairEvents` (`PairMinted`/`PairBurned`), `watchTokenTransfers` (`Transfer`), `getPastPairEvents` backfill — all emit a stable typed `ChainEvent` envelope (decoded args + `blockNumber`/`transactionHash`/`logIndex`/checksummed `address`). Only mined, non-reorg-removed logs are surfaced. Each watcher returns an idempotent, failure-isolated `Unwatch`.
+- **Refuse-if-absent chain config** (`src/chain-config.ts`): `loadChainConfig` (Zod, mirrors `@rose/config`) over `SEPOLIA_RPC_URL` + `ROSE_PAIR_ADDRESS`/`ROSE_L_TOKEN_ADDRESS`/`ROSE_S_TOKEN_ADDRESS`/`ROSE_IDENTITY_REGISTRY_ADDRESS`; `ChainConfigRefusalError` names every offender; rejects non-http(s) URLs and the zero/placeholder address; EIP-55-checksums addresses. NO default, NO placeholder, NO secret.
+- **ABIs** (`src/abis/*.ts`): curated `as const` subsets copied verbatim from `prod/contracts/out/{RoseToken,CoupledPair}.sol/*.json` — verified signature-identical by the reviewer.
+
+## Gates (all green; tests LOCAL only — mock EIP-1193 transport, NOT Sepolia)
+
+- **Vitest 330/330** (baseline 302 + 28 new: config 16, clients 4, watchers 8).
+- **forge 171/171** unchanged (no Solidity touched).
+- `pnpm typecheck` / `lint` / `check:regime` / `check:migrations` / `format:check` — all pass.
+- **No secret created; refuse-if-absent in place** — `.env.example` got 4 BLANK chain address keys; the package refuses cleanly with any key absent/invalid.
+
+## Code-review outcome (Blind Hunter + Edge Case Hunter + Acceptance Auditor)
+
+- **Acceptance Auditor:** PASS on AC-1/AC-2/AC-3; scope held (no outbox/mint/burn/group-view/reconcile).
+- **7 patches applied:** filter pending/reorg-removed logs (protects 5.2 idempotency keys); checksum the envelope address (5.2 routing); reject the zero/placeholder address; strengthen the EIP-55 test (letter-bearing addresses); deterministic refusal ordering; idempotent + failure-isolated teardown; corrected story test-count prose.
+- **2 deferred:** RPC chain-id verification → real-Sepolia ops; `getPastPairEvents` range chunking/finality → reconcile (5.6). Recorded in `deferred-work.md`.
+- **4 dismissed** (by-design / mirrors-viem-API / RPC-validated / out-of-scope).
+
+## Interfaces handed to Epic 5 (5.2 → 5.6)
+
+- `ChainEvent` envelope → **5.2** persists into `outbox_events` (tx hash for the journal entry, NFR-3).
+- `watchPairEvents`/`watchTokenTransfers`/`getPastPairEvents` → **5.2** outbox ingestion + **5.6** reconcile backfill.
+- `createRoseChainClients`/`getWalletClient` → **5.3/5.4** mint/burn write txs (key handling out-of-band, not in this story).
+- `readTokenBalance`/`readTotalSupply` → **5.6** ledger↔chain comparison (chain authoritative, D3).
+- `loadChainConfig` → addresses for every chain consumer.
+
+## Deferred (ops)
+
+- REAL Sepolia connection (funded RPC + recording `DeployRoseSuite.deploy(...)` addresses into env) — awaits out-of-band secrets; see `deferred-work.md` story-5.1 ops section. The code path is complete and refuse-if-absent; it is simply not exercised against a live endpoint.
+
+---
+
+# BMAD Pipeline Report — Story 5-2 (2026-06-16)
+
+**Story:** `5-2-implement-the-outbox-saga-dual-write-with-the-on-chain-tx-as-commit-point`
+**Epic 5 (Ledger↔Chain Integration).** Pipeline: create-story → dev-story → code-review (autonomous, no user checkpoints).
+
+## Final status
+
+**DONE.** Status: backlog → ready-for-dev → in-progress → review → done. No git commit created (per instructions).
+
+## What was delivered (outbox/saga, on-chain tx = commit point — NFR-9/NFR-3)
+
+The outbox + saga dual-write MECHANICS where the on-chain tx confirmation is the commit point:
+
+- **Migration 0007** (`@rose/ledger`, reversible 6→7): `outbox_events` table (lifecycle PENDING/SUBMITTED/CONFIRMED/FAILED/COMPENSATED; DB-enforced idempotency via `UNIQUE idempotency_key` + `UNIQUE tx_hash`; `journal_entry_id` FK; `payload` jsonb; `attempts`/`last_error`) + a nullable `journal_entries.tx_hash` column WITH a `UNIQUE` backstop (one on-chain tx ↔ one journal entry, NFR-3).
+- **Outbox repository** (`@rose/ledger`): `recordIntent` (idempotent), `recordSubmission` (transactional row-lock + conditional update), `markConfirmed`/`markFailed`/`markCompensated` (fail-closed `LEGAL_TRANSITIONS`), `findByTxHash`/`findByTxHashForUpdate`/`findByIdempotencyKey`/`listByStatus`, `stampJournalEntryTxHash`.
+- **Generic port-driven saga** (`@rose/chain/src/outbox/OutboxSaga`): `recordIntent → submit → confirm[COMMIT POINT] → compensate/resumePending`. The journal entry is posted ONLY at `confirm`, inside one DB transaction with `FOR UPDATE` row-locking + a non-SUBMITTED guard, idempotent on tx hash. `submit`/`LedgerEffect`/`OutboxStore` are ports so 5.3/5.4 plug in concrete `mintPair`/`burnPair` + `postTransfer` journal entries; consumes the 5.1 `ChainEvent` via `confirmFromEvent`.
+
+## Files created / modified
+
+New: `prod/packages/ledger/src/migrations/0007-outbox-events.ts`, `schema/outbox-events.ts`, `repositories/outbox-events.ts`, `outbox-events.test.ts`; `prod/packages/chain/src/outbox/outbox-saga.ts`, `outbox/index.ts`, `outbox/outbox-saga.test.ts`.
+Modified: `ledger` `migrations/index.ts`, `schema/journal-entries.ts`, `schema/index.ts`, `index.ts`; `chain` `package.json` (+`@rose/ledger`), `tsconfig.json` (+`../ledger` ref), `src/index.ts`; root `pnpm-lock.yaml`; `deferred-work.md`; `sprint-status.yaml`.
+
+## Gates (all green) — tests are LOCAL, not Sepolia
+
+- **Vitest 356/356** (baseline 330 → +26: 17 ledger repo against LOCAL docker Postgres, 9 chain saga with in-memory fakes + synthetic `ChainEvent`s). NO network, NO RPC, NO key.
+- **forge 171/171** unchanged (no Solidity touched).
+- **migrations** reversible up→down→up over 7. **typecheck / lint / check:regime / check:migrations / format:check** all green.
+
+## Code review (3 adversarial layers)
+
+Acceptance Auditor: PASS on AC-1/AC-2/AC-3 + scope-held + no-secret + tests-local. Blind + Edge-Case Hunters converged on real concurrency/idempotency risks. **6 patches applied** (FOR UPDATE serialization + non-SUBMITTED guard in `confirm`; `journal_entries.tx_hash` UNIQUE backstop; transactional `recordSubmission` vs the submit race; submit error-preservation; two WARN-log observability gaps). **2 deferred → 5.6** (broadcast-then-throw orphan → reconcile backstop; `attempts` re-arming). **3 dismissed** (payload-float — real NFR-2 boundary is `recordJournalEntry`; `resumePending` signature; File-List labeling).
+
+## Security / network scope
+
+NO secret, NO placeholder RPC/key, NO `.env` created. `@rose/chain` remains the only package importing viem; the new chain→ledger dependency is DB-executor + outbox-repo only (no viem leak into ledger, no import cycle). Real Sepolia broadcast/confirmation + finality-depth tuning recorded as ops-deferred in `deferred-work.md`.
+
+## Interfaces for 5.3 → 5.6
+
+- **5.3 (mint) / 5.4 (burn):** supply the `submit` port (`getWalletClient` + `mintPair`/`burnPair`) and the `LedgerEffect` port (`postTransfer`-governed `recordJournalEntry`); reserved `operation_kind` codes `PAIR_MINT`/`PAIR_BURN`; tx hash stamped on the journal entry at confirm.
+- **5.6 (reconcile):** `resumePending()` seam (non-terminal rows) + the deferred broadcast-orphan/`attempts`-rearm cadence; `findByTxHash`, `listByStatus` for divergence scans.
+- **NFR-3 surface:** `journal_entries.tx_hash` (+ UNIQUE) and `outbox_events.journal_entry_id` give the auditable on-chain↔ledger link.
+
+---
+
+# Story 5.3 — Mint paired ERC-3643 L/S tokens on Sepolia and record them in the ledger
+
+**Pipeline:** create-story → dev-story → code-review (3 adversarial layers). **Final status: done.** Branch `feat/epic-3-capital-flow-authorization`; NO git commit. NETWORK SCOPE: proven LOCAL only (mock EIP-1193 for the on-chain write, local Postgres + synthetic `PairMintedEvent`s for the dual-write) — NO real Sepolia, NO secret/placeholder/`.env`; real `mintPair` broadcast deferred (deferred-work.md story-5.3 ops).
+
+## What shipped
+
+The concrete paired-mint dual-write, wired onto the 5.2 `OutboxSaga`:
+
+- **`mintPair` write seam** — `submitMintPair(clients, account, params)` (the saga `submit` for `PAIR_MINT`) calls `CoupledPair.mintPair(lTo, sTo, amount)` via the 5.1 `getWalletClient` seam; `encodeMintPairCall` is the network-free calldata seam; the `mintPair` function entry added to the curated `coupledPairAbi` (no Solidity change).
+- **Commit-point balanced `LedgerEffect`** — `makeMintPairLedgerEffect(onChainArgs, plan)` posts ONE balanced journal entry linked to the coupled pair (FR-13), capturing the L+S token QUANTITY (taken from the confirmed on-chain `PairMinted` args — D3/NFR-9) + the notional VALUE; cross-checks `lTo`/`sTo`/`amount` vs the recorded intent; guards plan-account overlap.
+- **Orchestration** — `MintPairDualWrite`: `start` (authorize PRE-submit, fail-closed → recordIntent PENDING → submit SUBMITTED, idempotent/no double-broadcast) and `confirmFromMintedEvent` (the commit point; never throws into the fire-and-forget watcher — returns a typed `MintConfirmOutcome`).
+
+NO new migration/table (reuses 5.2 `outbox_events` + `journal_entries.tx_hash`); NO new package dependency edge (authorization is an injected `MintAuthorizationGate` port — `@rose/chain` stays off `@rose/authorization`).
+
+## Code review (Blind Hunter + Edge-Case Hunter[live DB] + Acceptance Auditor)
+
+Auditor PASS on AC-1/AC-2/scope/network-scope/P0. **8 patches applied** — headline fixes: (H) authorization moved PRE-submit (refusing after the irreversible on-chain mint would strand tokens with no recordable entry — unrecoverable NFR-9 divergence); (H) `start` short-circuits non-PENDING rows so retry/key-reuse never re-broadcasts a duplicate mint; (M) `confirmFromMintedEvent` catches effect errors → typed outcome, never throws into the watcher; (M) `lTo`/`sTo` recipient cross-check; (M) plan-account distinctness guard; (L) uint256 bound, divergence WARN, tx-hash shape check. **2 boundaries deferred** (multi-`PairMinted`-per-tx → 5.6; cross-leg same-asset → Epic 6).
+
+## Gate (final, all green)
+
+- **Vitest 378** (356 baseline + 22 new: 16 unit network-free + 6 real-Postgres integration; +5 from review patches)
+- **forge 171/171** unchanged (no Solidity touched) · **migrations 7** (no new migration, up→down→up reversible)
+- `pnpm typecheck` · `pnpm lint` · `pnpm check:regime` · `pnpm format:check` — all green
+
+## Interfaces for 5.4 → 5.6
+
+- **5.4 (burn):** mirror `submitMintPair`/`encodeMintPairCall` with `burnPair`; reuse the `MintLedgerPlan`/`MintAuthorizationGate`/commit-point pattern + `MintConfirmOutcome`.
+- **5.6 (reconcile):** `MintQuantityDivergenceError` + the SUBMITTED-row anomalies surfaced by `confirmFromMintedEvent` are the divergence signals; the live `watchPairEvents → confirmFromMintedEvent` cadence/finality-depth is 5.6-owned.
+
+---
+
+# BMAD Pipeline Run — Story 5-4 (burn the coupled token package on redemption)
+
+**Date:** 2026-06-16 · **Story:** `5-4-burn-the-coupled-token-package-on-redemption-with-matching-ledger-entries` · **Final status:** `done`
+
+## Pipeline
+
+create-story → dev-story → code-review, executed autonomously for story 5-4 only. Sprint status transitions: `backlog → ready-for-dev → in-progress → review → done`.
+
+## What was delivered (FR-21, NFR-9 / NFR-3)
+
+Paired-burn dual-write on the Story-5.2 outbox/saga, the burn twin of the Story-5.3 paired-mint pattern: submit `CoupledPair.burnPair(lFrom, sFrom, amount)` (the commit point), and post the matching balanced ledger entry ONLY at the confirmed `PairBurned` event. The ledger quantity direction is the INVERSE of mint — a burn RETIRES supply (holder leg CREDIT, supply contra DEBIT). Authorization is fail-closed PRE-submit; the commit-point effect records the confirmed on-chain quantity unconditionally (D3). Idempotent replay, anti-rebroadcast on retry, never-throw-into-watcher.
+
+## Files created / modified
+
+- NEW `prod/packages/chain/src/pair-shared.ts` — factored direction-agnostic primitives (amount/plan/authorization guards + types) shared by the paired dual-writes.
+- NEW `prod/packages/chain/src/burn/burn-pair.ts` — `BurnPairDualWrite`, `submitBurnPair`/`encodeBurnPairCall`, `makeBurnPairLedgerEffect`, `BurnPairIntent`/`BurnLedgerPlan` + burn errors.
+- NEW `prod/packages/chain/src/burn/index.ts` — public surface.
+- NEW `prod/packages/chain/src/burn/burn-pair.test.ts` — 17 tests (mock EIP-1193 + in-memory fakes; no DB/network).
+- NEW `prod/packages/chain/src/burn/burn-pair-ledger.test.ts` — 6 tests (real local Postgres).
+- MODIFIED `prod/packages/chain/src/abis/coupled-pair-abi.ts` — added the `burnPair` function entry (signature-identical; `mintPair` + events intact).
+- MODIFIED `prod/packages/chain/src/index.ts` — re-export the burn surface (5.1/5.2/5.3 intact).
+- MODIFIED `_bmad-output/implementation-artifacts/{deferred-work.md, sprint-status.yaml}` and the 5-4 story file.
+
+## Gates (final)
+
+- `pnpm test`: **401 passed** (378 baseline + 23 burn) — all LOCAL (mock EIP-1193 + local Postgres + synthetic `PairBurnedEvent`).
+- `pnpm typecheck` · `pnpm lint` · `pnpm format:check` · `pnpm check:regime` · `pnpm check:migrations` (7, reversible): all green.
+- `forge test`: **171 passed**, unchanged (no Solidity touched). No new migration (`PAIR_BURN` already allowed in migration 0007).
+
+## Code review (3 adversarial layers)
+
+Acceptance Auditor: full PASS on AC-1/AC-2/scope/network-scope/NFR-2/ABI-signature/no-migration/no-new-dep. Edge-Case Hunter: confirmed all six 5.3 hardenings reproduced + correct inverted direction + retirement asserted. Blind Hunter: posting direction correct, no float contamination. 1 patch applied (untested `sFrom` divergence branch → added unit test). 6 boundaries deferred with rationale (5.6 reconcile / Epic-6 / consistent-with-5.3). 2 dismissed (false positives). No unresolved High/Med correctness defect.
+
+## Network scope & secrets
+
+NO Sepolia, NO RPC, NO wallet key, NO secret, NO placeholder, NO `.env` in any asserted path. The REAL Sepolia `burnPair` broadcast + finality cadence is an ops-deferred step recorded in `deferred-work.md` (story-5.4 ops section). No git commit was created.
+
+## Impacts / interfaces for 5-5 and 5-6
+
+- 5-5 (group view) and 5-6 (reconcile) consume: `BurnPairDualWrite` (`start`/`confirmFromBurnedEvent`), `makeBurnPairLedgerEffect`/`BurnLedgerPlan`, `BurnQuantityDivergenceError` (the NFR-9 divergence signal), and the `burnPair` ABI entry. A confirmed burn shows supply RETIRED in the ledger, which 5-5's group view renders and 5-6's chain-vs-ledger comparison reconciles.
+- `pair-shared.ts` is the new shared home for the paired dual-write primitives (mint retrofit onto it is a deferred clean-up).
+
+---
+
+# BMAD Pipeline Report — Story 5-5 (consolidated group view, text + JSON)
+
+**Date:** 2026-06-16 · **Story:** `5-5-produce-the-consolidated-group-view-text-json` · **Epic 5** · **Final status: done** · **No git commit, no secret created.**
+
+## Pipeline (create-story → dev-story → code-review)
+
+1. **create-story** — drafted the context-rich story (FR-9), `ready-for-dev`. Decision: the group view's architecture home is a NEW `@rose/reconcile` package (`prod/packages/reconcile`, FR-9/FR-10), decoupled from `@rose/chain` via an injected on-chain-supply snapshot (the codebase's injected-port precedent).
+2. **dev-story** — implemented test-first; full gate green; `review`.
+3. **code-review** — 3 adversarial layers (Blind / Edge-Case / Acceptance Auditor full PASS). 1 Med patch applied + regression test, 2 defers, 2 dismissed; `done`.
+
+## What was built (`@rose/reconcile`, READ-ONLY)
+
+- `buildGroupView(db, opts?)` — SELECT-only assembly: per-entity → per-account-type balances (normal-side signed net), per-entity per-`(asset,scale)` subtotals, consolidated per-`(asset,scale)` group NAV (assets − liabilities) + a double-entry `balanced` flag, coupled-pair positions (V_A/V_B/K integer strings, anchor/leverage/floor decimals, state, noteId).
+- `renderGroupViewText` (human text) + `serializeGroupView`/`groupViewToJson` (structured JSON, no bigint) — both derived from the ONE integer source; `MoneyView` = `{ asset, scale, smallestUnits, decimal }`.
+- `chain-supply.ts` — injected `ChainSupplySnapshot` / `ChainSupplyReader` / `loadChainSupplySnapshot`; read-only divergence signal (ledger ASSET-side quantity vs on-chain totalSupply; reports `diverged`/`anyDivergence`, never corrects — 5.6 corrects).
+- `ACCOUNT_NAV_CLASSIFICATION` — the single documented P0 presentation map.
+
+## Gates (all green, LOCAL — not Sepolia)
+
+- `pnpm test` **415** (baseline 401 + 14 new reconcile tests) · `forge test` **171** unchanged (no Solidity) · `pnpm typecheck` · `pnpm lint` · `pnpm check:regime` · `pnpm check:migrations` **7** reversible (no new migration) · `pnpm format:check`.
+- Tests prove: exact integer→decimal (EUR 150050 → "1500.50"), NAV = assets − liabilities, the `(asset,scale)` denomination split, empty-ledger four-entity render, JSON no-bigint round-trip, coupled-pair + note embedding, chain-consistent ⇒ no divergence, deliberate mismatch ⇒ exact delta reported + ledger UNCHANGED (read-only).
+
+## Code-review decision
+
+- **Patch (Med):** subtotals/consolidation/divergence keyed on `asset` only → keyed on the ledger's `(asset, decimal_scale)` balance unit + regression test.
+- **Defers:** auto-derive snapshot from leg→account/token-address mapping (Epic-6/5.6); NAV classification = revisable P0 map.
+- **Dismissed:** `groupViewToJson` identity (intentional API point); non-deterministic `generatedAt` default (injectable clock).
+
+## Files
+
+New: `prod/packages/reconcile/{package.json,tsconfig.json,src/index.ts,src/group-view.ts,src/group-view-text.ts,src/chain-supply.ts,src/group-view.test.ts,src/divergence.test.ts,src/group-view-text.test.ts,src/index.test.ts}`. Modified: root `tsconfig.json` (references), `pnpm-lock.yaml`, `deferred-work.md`, `sprint-status.yaml`, this story file.
+
+## For 5-6 (reconcile-and-correct, last of epic 5)
+
+`buildGroupView`/`GroupView` is the consolidated read model 5.6 extends; `ChainSupplySnapshot`/`ChainSupplyReader`/`loadChainSupplySnapshot` is the injected on-chain-supply seam 5.6 wires to `@rose/chain` `readTotalSupply`; `DivergenceView`/`ChainComparisonView` is the divergence signal 5.6 turns into a journaled correcting entry (correct-toward-chain, D3/NFR-9); `ACCOUNT_NAV_CLASSIFICATION` is reused. The real Sepolia supply read + leg→account mapping + finality/cadence/reorg remain ops/5.6-deferred (no secret).
+
+---
+
+# BMAD Pipeline Run — Story 5-6 (reconcile ledger↔chain, correct toward the chain) — 2026-06-16
+
+**Scope:** single story `5-6-reconcile-ledger-chain-and-correct-the-ledger-toward-the-chain` — the LAST story of Epic 5. Full cycle: create-story → dev-story → code-review. Autonomous, LOCAL-only (no Sepolia secrets).
+
+## Final status
+
+- **Story 5-6: `done`.** **`epic-5: done`** (all of 5-1…5-6 complete).
+- No git commits created. No `.env`, no secret, no placeholder address/RPC.
+
+## What shipped (FR-10 / NFR-9, D3 — chain authoritative)
+
+`@rose/reconcile` extended from the 5.5 READ-ONLY group view to the reconcile-and-CORRECT loop:
+
+- `reconcileLedgerToChain(db, snapshot, plan)` — detects per-token divergence (`onChainTotalSupply − ledgerQuantity`) and CORRECTS the ledger TOWARD the chain via ONE balanced, journaled, auditable double-entry (`recordJournalEntry`; holder ASSET leg vs non-ASSET contra in the same `(asset, scale)`; positive integer amounts; description names the signed divergence; append-only; NOT via `postTransfer`). Idempotent (consistent ⇒ no entry; second run ⇒ no-op). Atomic (one `db.transaction`). Fail-loud (`UnreconciledDivergenceError` strict mode; `InvalidCorrectionAccountsError`).
+- Internal-consistency report (AC-1) reusing `buildGroupView` consolidated `balanced` flags.
+- Pure finality/cadence helpers (AC-4): `isFinal`, `classifyChainEventFinality`, `shouldReconcileOnEvent` over plain block-coordinate data (no `@rose/chain` edge) + documented default cadence (per-event + on-demand; act at confirmation depth; reorg-below-depth ⇒ reconcile).
+- Proven LOCALLY: local Postgres ledger reads + correcting writes; synthetic `ChainSupplySnapshot`s + a simulated `getPastPairEvents`-style backfill→snapshot→correct re-derivation.
+
+## Files
+
+- NEW: `prod/packages/reconcile/src/reconcile.ts`, `finality.ts`, `reconcile.test.ts`, `finality.test.ts`
+- MOD: `prod/packages/reconcile/src/index.ts`, `index.test.ts`, `group-view-text.test.ts` (pre-existing flaky regex fix)
+- MOD: `_bmad-output/implementation-artifacts/{sprint-status.yaml, deferred-work.md, 5-6-…md}`
+- No migration (stays 7), no Solidity (forge stays 171).
+
+## Gates (LOCAL — not Sepolia)
+
+- `pnpm test`: **432 passed** (baseline 415 → +17). `forge test`: **171/171** (unchanged, no Solidity).
+- `pnpm typecheck`, `pnpm lint`, `pnpm check:regime`, `pnpm check:migrations` (7, reversible), `pnpm format:check`: all green.
+
+## Code review (3 adversarial layers)
+
+- **1 patch (Med):** finality classifier returned `reorg` for a mined-but-shallow event (would reconcile before finality) — corrected to `pending`; `reorg` reserved for `removed` logs.
+- **1 patch (Low, pre-existing):** 5.5 `group-view-text.test.ts` float-artifact regex false-matched UUIDs containing "e-" — strip UUIDs first.
+- **2 deferred:** read-before-write-tx TOCTOU (safe via idempotent convergence); duplicate-`(asset,scale)`-in-snapshot dedup (caller-contract / Epic-6). **2 dismissed:** injectable-clock default; identity JSON helper.
+- Outcome: **Approve** — the correction stays balanced/auditable and the chain wins (D3); no unresolved High/Med defect.
+
+## Epic-6 interface notes
+
+`reconcileLedgerToChain` (on-demand/per-event entry point), `ReconcilePlan`/`TokenCorrectionAccounts` (caller-supplied snapshot + holder/contra topology to derive from a persisted mapping), `ReconciliationReport`/`renderReconciliationText`/`serializeReconciliationReport` (audit surface for Covenant Console/API), and `isFinal`/`classifyChainEventFinality`/`shouldReconcileOnEvent` (cadence decision to wire to `watchPairEvents`/`getPastPairEvents` + a funded RPC — ops-deferred).

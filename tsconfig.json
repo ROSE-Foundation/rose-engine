@@ -7,6 +7,8 @@
     { "path": "prod/packages/config" },
     { "path": "prod/packages/ledger" },
     { "path": "prod/packages/rule-spec" },
-    { "path": "prod/packages/authorization" }
+    { "path": "prod/packages/authorization" },
+    { "path": "prod/packages/chain" },
+    { "path": "prod/packages/reconcile" }
   ]
 }
