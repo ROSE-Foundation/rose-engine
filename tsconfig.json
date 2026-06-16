@@ -1,0 +1,10 @@
+{
+  // Solution-style root config: references each PROD package's composite project so
+  // `tsc -b` typechecks/builds the whole workspace in dependency order.
+  "files": [],
+  "references": [
+    { "path": "prod/packages/shared" },
+    { "path": "prod/packages/config" },
+    { "path": "prod/packages/ledger" }
+  ]
+}

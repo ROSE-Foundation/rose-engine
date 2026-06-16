@@ -1,0 +1,354 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rose Engine — Covenant Console (MOCKUP)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#0e1419;color:#e7ecf1;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  ::selection{background:#1f8a7d;color:#06110f;}
+</style>
+</head>
+<body>
+<div style="display:flex;min-height:100vh;background:#0e1419;">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside style="width:208px;flex-shrink:0;border-right:1px solid #1f2a33;background:#0b1116;display:flex;flex-direction:column;padding:18px 0;position:sticky;top:0;height:100vh;">
+    <div style="padding:0 18px 18px 18px;border-bottom:1px solid #1a242c;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:9px;">
+        <div style="width:18px;height:18px;border-radius:50%;border:1.5px solid #3fd1bd;position:relative;flex-shrink:0;">
+          <div style="position:absolute;inset:4px;border-radius:50%;background:#3fd1bd;opacity:0.55;"></div>
+        </div>
+        <a href="index.html" style="font-weight:600;letter-spacing:0.02em;font-size:14px;text-decoration:none;color:#e7ecf1;cursor:pointer;">Rose <span style="color:#7d8b97;font-weight:400;">Engine</span></a>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.14em;color:#566370;margin-top:7px;">TREASURY OS · v0.0-MOCK</div>
+    </div>
+
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.16em;color:#4d5a66;padding:8px 18px 6px;">CONSOLES</div>
+    <a href="covenant-console.html" style="display:flex;align-items:center;gap:11px;padding:9px 18px;color:#e7ecf1;text-decoration:none;border-left:2px solid #3fd1bd;background:linear-gradient(90deg, rgba(63,209,189,0.08), transparent);font-size:13.5px;">
+      <span style="width:6px;height:6px;border-radius:1px;background:#3fd1bd;flex-shrink:0;"></span>Treasury
+    </a>
+    <a href="exchange-trading.html" style="display:flex;align-items:center;gap:11px;padding:9px 18px;color:#9aa6b2;text-decoration:none;border-left:2px solid transparent;font-size:13.5px;">
+      <span style="width:6px;height:6px;border-radius:1px;background:#3a4651;flex-shrink:0;"></span>Exchange
+    </a>
+    <a href="coupled-pair.html" style="display:flex;align-items:center;gap:11px;padding:9px 18px;color:#9aa6b2;text-decoration:none;border-left:2px solid transparent;font-size:13.5px;">
+      <span style="width:6px;height:6px;border-radius:1px;background:#3a4651;flex-shrink:0;"></span>Coins
+    </a>
+
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.16em;color:#4d5a66;padding:18px 18px 6px;">TREASURY</div>
+    <a style="display:flex;align-items:center;gap:11px;padding:7px 18px;color:#e7ecf1;text-decoration:none;font-size:12.5px;border-left:2px solid transparent;">Covenant console</a>
+    <a style="display:flex;align-items:center;gap:11px;padding:7px 18px;color:#9aa6b2;text-decoration:none;font-size:12.5px;border-left:2px solid transparent;">Bright lines</a>
+    <a style="display:flex;align-items:center;gap:11px;padding:7px 18px;color:#9aa6b2;text-decoration:none;font-size:12.5px;border-left:2px solid transparent;">Entités</a>
+
+    <div style="flex:1;"></div>
+    <div style="padding:12px 18px;border-top:1px solid #1a242c;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;line-height:1.6;">
+      <div>OPERATOR</div>
+      <div style="color:#9aa6b2;">treasury.ops@rose</div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column;">
+
+    <!-- Header -->
+    <header style="border-bottom:1px solid #1f2a33;background:#0b1116;padding:14px 28px;display:flex;align-items:center;gap:20px;position:sticky;top:0;z-index:5;">
+      <div>
+        <div style="font-size:15px;font-weight:600;letter-spacing:0.01em;">Covenant console</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6b7884;letter-spacing:0.04em;margin-top:2px;">Groupe · EUR/USD 1× · MàJ 14:32:07 UTC</div>
+      </div>
+      <div style="flex:1;"></div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#7d8b97;text-align:right;line-height:1.5;margin-right:4px;">
+        <div style="color:#3fd1bd;">● LIVE FEED</div>
+        <div>poll 5s</div>
+      </div>
+      <div style="display:flex;align-items:stretch;border:1px solid #5a4a1e;background:#191503;border-radius:5px;overflow:hidden;">
+        <div style="width:13px;background:repeating-linear-gradient(45deg,#e3b341 0 5px,#191503 5px 10px);"></div>
+        <div style="padding:7px 13px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.13em;color:#e3b341;font-weight:600;align-self:center;">MOCKUP — NON FONCTIONNEL</div>
+        <div style="width:13px;background:repeating-linear-gradient(45deg,#e3b341 0 5px,#191503 5px 10px);"></div>
+      </div>
+    </header>
+
+    <!-- Body -->
+    <div style="padding:20px 28px 56px;">
+
+      <!-- Breach alert banner -->
+      <div style="display:flex;align-items:center;gap:14px;border:1px solid #4a2226;background:linear-gradient(90deg,#220f11,#190c0e);border-radius:8px;padding:13px 16px;margin-bottom:20px;">
+        <div style="width:30px;height:30px;border-radius:50%;border:1.5px solid #e0484f;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:#e0484f;font-weight:700;font-size:16px;font-family:'IBM Plex Mono',monospace;">!</div>
+        <div style="flex:1;min-width:0;">
+          <div style="font-size:13.5px;font-weight:600;color:#ffd9da;">1 bright line franchie · Ségrégation collatéral client</div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#d98a8d;margin-top:2px;">ISS-003 · €4.20M de collatéral client remonté vers la trésorerie · détecté 14:18:42 UTC</div>
+        </div>
+        <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;color:#fff;background:#e0484f;border-radius:4px;padding:5px 10px;font-weight:600;flex-shrink:0;">BREACH ACTIF</span>
+      </div>
+
+      <!-- KPI row -->
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+        <div style="border:1px solid #1f2a33;border-radius:8px;background:#151c23;padding:15px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#7d8b97;">NAV — GROUPE</span>
+            <span style="width:6px;height:6px;border-radius:50%;background:#3a4651;"></span>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:500;margin-top:14px;line-height:1;">
+            <span style="font-size:26px;">€1,284.6</span><span style="font-size:14px;color:#7d8b97;">M</span>
+          </div>
+          <div style="margin-top:11px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3fd1bd;font-variant-numeric:tabular-nums;">▲ 0.4% <span style="color:#5f6c78;">· 24h</span></div>
+        </div>
+
+        <div style="border:1px solid #1f2a33;border-radius:8px;background:#151c23;padding:15px 16px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#7d8b97;">YIELD DU FLOAT</span>
+            <span style="width:6px;height:6px;border-radius:50%;background:#3a4651;"></span>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:500;margin-top:14px;line-height:1;">
+            <span style="font-size:26px;">3.82</span><span style="font-size:14px;color:#7d8b97;">% APY</span>
+          </div>
+          <div style="margin-top:11px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3fd1bd;font-variant-numeric:tabular-nums;">▲ 0.06pp <span style="color:#5f6c78;">· 24h</span></div>
+        </div>
+
+        <div style="border:1px solid #234039;border-radius:8px;background:#102420;padding:15px 16px;position:relative;overflow:hidden;">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:2px;background:#3fd1bd;"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#7d8b97;">BACKING FLOAT</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:0.08em;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:2px 5px;">BRIGHT LINE</span>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:500;margin-top:14px;line-height:1;color:#eaf6f3;">
+            <span style="font-size:26px;">112.4</span><span style="font-size:14px;color:#3fd1bd;">%</span>
+          </div>
+          <div style="margin-top:11px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#3fd1bd;font-variant-numeric:tabular-nums;">floor 100.0% <span style="color:#2ba896;">· +12.4pp</span></div>
+        </div>
+
+        <div style="border:1px solid #4a2226;border-radius:8px;background:#220f11;padding:15px 16px;position:relative;overflow:hidden;">
+          <div style="position:absolute;left:0;top:0;bottom:0;width:2px;background:#e0484f;"></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.1em;color:#d98a8d;">BRIGHT LINES</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:0.08em;color:#fff;background:#e0484f;border-radius:3px;padding:2px 5px;font-weight:600;">1 BREACH</span>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-weight:500;margin-top:14px;line-height:1;color:#ffd9da;">
+            <span style="font-size:26px;">3</span><span style="font-size:14px;color:#e0848a;"> / 5 saines</span>
+          </div>
+          <div style="margin-top:11px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#e3b341;font-variant-numeric:tabular-nums;">1 near-floor <span style="color:#a85b5f;">· 1 breach</span></div>
+        </div>
+      </div>
+
+      <!-- Two-column: balances + exposure -->
+      <div style="display:grid;grid-template-columns:1.55fr 1fr;gap:16px;margin-bottom:20px;">
+
+        <!-- Balances by entity -->
+        <section style="border:1px solid #1f2a33;border-radius:8px;overflow:hidden;background:#151c23;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1f2a33;background:#0f161c;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#9aa6b2;">SOLDES PAR ENTITÉ</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">EUR · base mark</span>
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr>
+                <th style="text-align:left;font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:9.5px;letter-spacing:0.12em;color:#6b7884;padding:9px 16px;border-bottom:1px solid #1f2a33;">ENTITÉ</th>
+                <th style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:9.5px;letter-spacing:0.12em;color:#6b7884;padding:9px 16px;border-bottom:1px solid #1f2a33;">SOLDE</th>
+                <th style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:9.5px;letter-spacing:0.12em;color:#6b7884;padding:9px 16px;border-bottom:1px solid #1f2a33;">24H Δ</th>
+                <th style="text-align:right;font-family:'IBM Plex Mono',monospace;font-weight:500;font-size:9.5px;letter-spacing:0.12em;color:#6b7884;padding:9px 16px;border-bottom:1px solid #1f2a33;">STATUT</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr style="border-bottom:1px solid #1a232b;">
+                <td style="padding:11px 16px;"><span style="font-family:'IBM Plex Mono',monospace;color:#9aa6b2;font-size:11px;margin-right:8px;">VCC-001</span><span style="color:#e7ecf1;">VCC</span><div style="font-size:11px;color:#6b7884;margin-top:1px;">Custody coins client</div></td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#e7ecf1;">€842.30M</td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#3fd1bd;">+0.2%</td>
+                <td style="padding:11px 16px;text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:2px 7px;">HEALTHY</span></td>
+              </tr>
+              <tr style="border-bottom:1px solid #1a232b;">
+                <td style="padding:11px 16px;"><span style="font-family:'IBM Plex Mono',monospace;color:#9aa6b2;font-size:11px;margin-right:8px;">HLD-000</span><span style="color:#e7ecf1;">Holding</span><div style="font-size:11px;color:#6b7884;margin-top:1px;">Equity groupe</div></td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#e7ecf1;">€318.74M</td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#7d8b97;">+0.0%</td>
+                <td style="padding:11px 16px;text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:2px 7px;">HEALTHY</span></td>
+              </tr>
+              <tr style="border-bottom:1px solid #1a232b;">
+                <td style="padding:11px 16px;"><span style="font-family:'IBM Plex Mono',monospace;color:#9aa6b2;font-size:11px;margin-right:8px;">TRD-002</span><span style="color:#e7ecf1;">Trading Co.</span><div style="font-size:11px;color:#6b7884;margin-top:1px;">Market making</div></td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#e7ecf1;">€98.41M</td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#e3b341;">−1.1%</td>
+                <td style="padding:11px 16px;text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:2px 7px;">HEALTHY</span></td>
+              </tr>
+              <tr style="background:#1c0f11;border-bottom:1px solid #3a1d20;">
+                <td style="padding:11px 16px;border-left:2px solid #e0484f;"><span style="font-family:'IBM Plex Mono',monospace;color:#d98a8d;font-size:11px;margin-right:8px;">ISS-003</span><span style="color:#ffd9da;">Issuer / Exchange</span><div style="font-size:11px;color:#a85b5f;margin-top:1px;">Émission coins</div></td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#ffd9da;">€24.90M</td>
+                <td style="padding:11px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#e0848a;">+3.4%</td>
+                <td style="padding:11px 16px;text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#fff;background:#e0484f;border-radius:3px;padding:2px 7px;font-weight:600;">BREACH</span></td>
+              </tr>
+            </tbody>
+            <tfoot>
+              <tr style="background:#0f161c;">
+                <td style="padding:10px 16px;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7d8b97;letter-spacing:0.04em;">TOTAL · 4 entités</td>
+                <td style="padding:10px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#e7ecf1;font-weight:500;">€1,284.35M</td>
+                <td style="padding:10px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;color:#3fd1bd;">+0.4%</td>
+                <td style="padding:10px 16px;text-align:right;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#e0484f;">1 BREACH</td>
+              </tr>
+            </tfoot>
+          </table>
+        </section>
+
+        <!-- Exposure by asset + invariant -->
+        <section style="border:1px solid #1f2a33;border-radius:8px;background:#151c23;display:flex;flex-direction:column;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1f2a33;background:#0f161c;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#9aa6b2;">EXPOSITION PAR ACTIF</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">delta-neutre</span>
+          </div>
+
+          <div style="padding:16px;">
+            <!-- EUR/USD asset -->
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#e7ecf1;">EUR/USD</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:1px 5px;">1× · LIVE</span>
+              </div>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:12px;color:#9aa6b2;font-variant-numeric:tabular-nums;">€1,180.0M</span>
+            </div>
+
+            <!-- Invariant bar V_A + V_B = K -->
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.1em;color:#566370;margin:14px 0 7px;">INVARIANT · V_A + V_B = K</div>
+            <div style="display:flex;height:34px;border-radius:5px;overflow:hidden;border:1px solid #28333d;">
+              <div style="width:50%;background:linear-gradient(180deg,#1f8a7d,#176b61);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#eaf6f3;font-weight:500;">V_A long</div>
+              <div style="width:50%;background:linear-gradient(180deg,#2a3a44,#212e36);display:flex;align-items:center;justify-content:center;font-family:'IBM Plex Mono',monospace;font-size:11px;color:#c2cdd6;font-weight:500;">V_B short</div>
+            </div>
+            <div style="display:flex;justify-content:space-between;margin-top:7px;font-family:'IBM Plex Mono',monospace;font-size:11px;font-variant-numeric:tabular-nums;">
+              <span style="color:#3fd1bd;">V_A €590.00M</span>
+              <span style="color:#9aa6b2;">V_B €590.00M</span>
+            </div>
+
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;padding:11px 13px;border:1px solid #234039;border-radius:6px;background:#102420;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#7d8b97;">K (pool cash)</span>
+              <div style="display:flex;align-items:center;gap:9px;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#eaf6f3;font-variant-numeric:tabular-nums;">€1,180.00M</span>
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:2px 5px;">✓ HOLD</span>
+              </div>
+            </div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;margin-top:9px;line-height:1.6;">Écart |V_A+V_B−K| = €0.00 · tolérance €0.01M</div>
+          </div>
+
+          <div style="flex:1;"></div>
+          <div style="border-top:1px solid #1f2a33;padding:12px 16px;display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;">
+            <span style="color:#7d8b97;">Net delta groupe</span>
+            <span style="color:#3fd1bd;font-variant-numeric:tabular-nums;">≈ 0.00 <span style="color:#5f6c78;">(neutre)</span></span>
+          </div>
+        </section>
+      </div>
+
+      <!-- Bright lines panel -->
+      <section style="border:1px solid #1f2a33;border-radius:8px;overflow:hidden;background:#151c23;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid #1f2a33;background:#0f161c;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#9aa6b2;">BRIGHT LINES · MARGE AU PLANCHER</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">5 covenants surveillés</span>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr;">
+
+          <!-- Row: Backing float — healthy -->
+          <div style="display:grid;grid-template-columns:230px 1fr 150px 96px;align-items:center;gap:16px;padding:13px 16px;border-bottom:1px solid #1a232b;">
+            <div>
+              <div style="font-size:13px;color:#e7ecf1;">Backing float</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6b7884;margin-top:1px;">plancher ≥ 100.0%</div>
+            </div>
+            <div>
+              <div style="height:7px;border-radius:4px;background:#1b242c;position:relative;overflow:hidden;">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:78%;background:#3fd1bd;border-radius:4px;"></div>
+                <div style="position:absolute;left:62%;top:-3px;bottom:-3px;width:1.5px;background:#5f6c78;"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#566370;"><span>0%</span><span>floor 100%</span><span>160%</span></div>
+            </div>
+            <div style="text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;">
+              <div style="font-size:15px;color:#eaf6f3;">112.4%</div>
+              <div style="font-size:10px;color:#3fd1bd;">marge +12.4pp</div>
+            </div>
+            <div style="text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:3px 8px;">HEALTHY</span></div>
+          </div>
+
+          <!-- Row: Collateral segregation — BREACH -->
+          <div style="display:grid;grid-template-columns:230px 1fr 150px 96px;align-items:center;gap:16px;padding:13px 16px;border-bottom:1px solid #3a1d20;background:#1c0f11;border-left:2px solid #e0484f;">
+            <div>
+              <div style="font-size:13px;color:#ffd9da;">Ségrégation collatéral</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#a85b5f;margin-top:1px;">jamais remonté trésorerie</div>
+            </div>
+            <div>
+              <div style="height:7px;border-radius:4px;background:#2a1416;position:relative;overflow:hidden;">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:91%;background:#e0484f;border-radius:4px;"></div>
+                <div style="position:absolute;left:100%;top:-3px;bottom:-3px;width:1.5px;background:#7d8b97;transform:translateX(-1.5px);"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#a85b5f;"><span>€0 upstream</span><span style="color:#d98a8d;">€4.20M franchi</span></div>
+            </div>
+            <div style="text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;">
+              <div style="font-size:15px;color:#ffd9da;">−€4.20M</div>
+              <div style="font-size:10px;color:#e0484f;">marge −100%</div>
+            </div>
+            <div style="text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#fff;background:#e0484f;border-radius:3px;padding:3px 8px;font-weight:600;">BREACH</span></div>
+          </div>
+
+          <!-- Row: Packets intact — warning (near floor) -->
+          <div style="display:grid;grid-template-columns:230px 1fr 150px 96px;align-items:center;gap:16px;padding:13px 16px;border-bottom:1px solid #1a232b;">
+            <div>
+              <div style="font-size:13px;color:#e7ecf1;">Intégrité des paquets</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6b7884;margin-top:1px;">coins bougent par paquets intacts</div>
+            </div>
+            <div>
+              <div style="height:7px;border-radius:4px;background:#1b242c;position:relative;overflow:hidden;">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:34%;background:#e3b341;border-radius:4px;"></div>
+                <div style="position:absolute;left:25%;top:-3px;bottom:-3px;width:1.5px;background:#5f6c78;"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#566370;"><span>0</span><span>floor 25 bp</span><span>100 bp</span></div>
+            </div>
+            <div style="text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;">
+              <div style="font-size:15px;color:#e7ecf1;">34 bp</div>
+              <div style="font-size:10px;color:#e3b341;">marge +9 bp</div>
+            </div>
+            <div style="text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#e3b341;border:1px solid #5a4a1e;border-radius:3px;padding:3px 8px;">NEAR-FLOOR</span></div>
+          </div>
+
+          <!-- Row: Invariant K — healthy -->
+          <div style="display:grid;grid-template-columns:230px 1fr 150px 96px;align-items:center;gap:16px;padding:13px 16px;border-bottom:1px solid #1a232b;">
+            <div>
+              <div style="font-size:13px;color:#e7ecf1;">Invariant V_A+V_B=K</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6b7884;margin-top:1px;">écart ≤ tolérance €0.01M</div>
+            </div>
+            <div>
+              <div style="height:7px;border-radius:4px;background:#1b242c;position:relative;overflow:hidden;">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:4%;background:#3fd1bd;border-radius:4px;"></div>
+                <div style="position:absolute;left:60%;top:-3px;bottom:-3px;width:1.5px;background:#5f6c78;"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#566370;"><span>€0.00</span><span>tol €0.01M</span><span></span></div>
+            </div>
+            <div style="text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;">
+              <div style="font-size:15px;color:#eaf6f3;">€0.00</div>
+              <div style="font-size:10px;color:#3fd1bd;">marge +€0.01M</div>
+            </div>
+            <div style="text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:3px 8px;">HEALTHY</span></div>
+          </div>
+
+          <!-- Row: Delta neutrality — healthy -->
+          <div style="display:grid;grid-template-columns:230px 1fr 150px 96px;align-items:center;gap:16px;padding:13px 16px;">
+            <div>
+              <div style="font-size:13px;color:#e7ecf1;">Neutralité delta</div>
+              <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#6b7884;margin-top:1px;">|net delta| ≤ 50 bp</div>
+            </div>
+            <div>
+              <div style="height:7px;border-radius:4px;background:#1b242c;position:relative;overflow:hidden;">
+                <div style="position:absolute;left:0;top:0;bottom:0;width:8%;background:#3fd1bd;border-radius:4px;"></div>
+                <div style="position:absolute;left:50%;top:-3px;bottom:-3px;width:1.5px;background:#5f6c78;"></div>
+              </div>
+              <div style="display:flex;justify-content:space-between;margin-top:5px;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#566370;"><span>0 bp</span><span>floor 50 bp</span><span>100 bp</span></div>
+            </div>
+            <div style="text-align:right;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;">
+              <div style="font-size:15px;color:#eaf6f3;">4 bp</div>
+              <div style="font-size:10px;color:#3fd1bd;">marge +46 bp</div>
+            </div>
+            <div style="text-align:right;"><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.06em;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:3px 8px;">HEALTHY</span></div>
+          </div>
+
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

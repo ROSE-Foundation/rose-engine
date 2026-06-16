@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# Turborepo
+.turbo/
+
+# Test coverage
+coverage/
+
+# Foundry (prod/contracts)
+prod/contracts/out/
+prod/contracts/cache/
+prod/contracts/broadcast/
+
+# Environment / secrets
+.env
+.env.local
+!.env.example
+
+# OS / editor
+.DS_Store
+*.log

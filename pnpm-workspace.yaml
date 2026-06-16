@@ -1,0 +1,6 @@
+# PROD TypeScript packages only. `prod/contracts` is a Foundry project, NOT a pnpm
+# package, so it is deliberately excluded. `/throwaway` is NEVER part of the PROD
+# workspace — keeping it out of these globs is the first line of regime-boundary
+# defense (CI guard in tools/check-regime-boundary.mjs is the enforced backstop).
+packages:
+  - 'prod/packages/*'

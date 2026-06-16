@@ -1,0 +1,33 @@
+{
+  "name": "rose-engine",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.30.2",
+  "engines": {
+    "node": ">=24",
+    "pnpm": ">=10"
+  },
+  "scripts": {
+    "build": "tsc -b",
+    "typecheck": "tsc -b",
+    "lint": "eslint .",
+    "format": "prettier --write \"prod/packages/**/*.{ts,tsx}\" \"tools/**/*.mjs\" \"*.{json,md,yml,yaml}\" \".github/**/*.yml\"",
+    "format:check": "prettier --check \"prod/packages/**/*.{ts,tsx}\" \"tools/**/*.mjs\" \"*.{json,md,yml,yaml}\" \".github/**/*.yml\"",
+    "test": "vitest run",
+    "check:regime": "node tools/check-regime-boundary.mjs",
+    "check:migrations": "tsx prod/packages/ledger/src/migrate-cli.ts verify"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^24.13.2",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^10.5.0",
+    "prettier": "^3.8.4",
+    "tsx": "^4.22.4",
+    "turbo": "^2.9.18",
+    "typescript": "^5.9.3",
+    "typescript-eslint": "^8.61.1",
+    "vitest": "^4.1.9"
+  }
+}

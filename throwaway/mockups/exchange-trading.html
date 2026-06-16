@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Rose Engine — Exchange Trading (MOCKUP)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;background:#0e1419;color:#e7ecf1;font-family:'IBM Plex Sans',system-ui,sans-serif;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;}
+  ::selection{background:#1f8a7d;color:#06110f;}
+</style>
+</head>
+<body>
+<div style="display:flex;min-height:100vh;background:#0e1419;">
+
+  <!-- ===== SIDEBAR ===== -->
+  <aside style="width:208px;flex-shrink:0;border-right:1px solid #1f2a33;background:#0b1116;display:flex;flex-direction:column;padding:18px 0;position:sticky;top:0;height:100vh;">
+    <div style="padding:0 18px 18px 18px;border-bottom:1px solid #1a242c;margin-bottom:10px;">
+      <div style="display:flex;align-items:center;gap:9px;">
+        <div style="width:18px;height:18px;border-radius:50%;border:1.5px solid #3fd1bd;position:relative;flex-shrink:0;">
+          <div style="position:absolute;inset:4px;border-radius:50%;background:#3fd1bd;opacity:0.55;"></div>
+        </div>
+        <a href="index.html" style="font-weight:600;letter-spacing:0.02em;font-size:14px;text-decoration:none;color:#e7ecf1;cursor:pointer;">Rose <span style="color:#7d8b97;font-weight:400;">Engine</span></a>
+      </div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;letter-spacing:0.14em;color:#566370;margin-top:7px;">TREASURY OS · v0.0-MOCK</div>
+    </div>
+
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.16em;color:#4d5a66;padding:8px 18px 6px;">CONSOLES</div>
+    <a href="covenant-console.html" style="display:flex;align-items:center;gap:11px;padding:9px 18px;color:#9aa6b2;text-decoration:none;border-left:2px solid transparent;font-size:13.5px;">
+      <span style="width:6px;height:6px;border-radius:1px;background:#3a4651;flex-shrink:0;"></span>Treasury
+    </a>
+    <a href="exchange-trading.html" style="display:flex;align-items:center;gap:11px;padding:9px 18px;color:#e7ecf1;text-decoration:none;border-left:2px solid #3fd1bd;background:linear-gradient(90deg, rgba(63,209,189,0.08), transparent);font-size:13.5px;">
+      <span style="width:6px;height:6px;border-radius:1px;background:#3fd1bd;flex-shrink:0;"></span>Exchange
+    </a>
+    <a href="coupled-pair.html" style="display:flex;align-items:center;gap:11px;padding:9px 18px;color:#9aa6b2;text-decoration:none;border-left:2px solid transparent;font-size:13.5px;">
+      <span style="width:6px;height:6px;border-radius:1px;background:#3a4651;flex-shrink:0;"></span>Coins
+    </a>
+
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.16em;color:#4d5a66;padding:18px 18px 6px;">MARCHÉS</div>
+    <a style="display:flex;align-items:center;justify-content:space-between;padding:7px 18px;color:#e7ecf1;text-decoration:none;font-size:12.5px;border-left:2px solid transparent;">
+      <span style="font-family:'IBM Plex Mono',monospace;">cEUR/USD</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#3fd1bd;">1.0851</span>
+    </a>
+    <a style="display:flex;align-items:center;justify-content:space-between;padding:7px 18px;color:#9aa6b2;text-decoration:none;font-size:12.5px;border-left:2px solid transparent;">
+      <span style="font-family:'IBM Plex Mono',monospace;">cEUR/USD·06</span><span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">1.0840</span>
+    </a>
+
+    <div style="flex:1;"></div>
+    <div style="padding:12px 18px;border-top:1px solid #1a242c;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;line-height:1.6;">
+      <div>OPERATOR</div>
+      <div style="color:#9aa6b2;">desk.mm@rose</div>
+    </div>
+  </aside>
+
+  <!-- ===== MAIN ===== -->
+  <main style="flex:1;min-width:0;display:flex;flex-direction:column;">
+
+    <!-- Header -->
+    <header style="border-bottom:1px solid #1f2a33;background:#0b1116;padding:14px 28px;display:flex;align-items:center;gap:20px;position:sticky;top:0;z-index:5;">
+      <div>
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="font-size:15px;font-weight:600;letter-spacing:0.01em;">Exchange</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#9aa6b2;border:1px solid #28333d;border-radius:4px;padding:2px 7px;">cEUR/USD · coupled coin</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.08em;color:#3fd1bd;border:1px solid #234039;background:#102420;border-radius:4px;padding:3px 8px;">● MARKET OPEN</span>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10.5px;color:#6b7884;letter-spacing:0.04em;margin-top:4px;">EUR/USD 1× · trade par paquets intacts · MàJ 14:32:07 UTC</div>
+      </div>
+      <div style="flex:1;"></div>
+      <div style="display:flex;align-items:stretch;border:1px solid #5a4a1e;background:#191503;border-radius:5px;overflow:hidden;">
+        <div style="width:13px;background:repeating-linear-gradient(45deg,#e3b341 0 5px,#191503 5px 10px);"></div>
+        <div style="padding:7px 13px;font-family:'IBM Plex Mono',monospace;font-size:10.5px;letter-spacing:0.13em;color:#e3b341;font-weight:600;align-self:center;">MOCKUP — NON FONCTIONNEL</div>
+        <div style="width:13px;background:repeating-linear-gradient(45deg,#e3b341 0 5px,#191503 5px 10px);"></div>
+      </div>
+    </header>
+
+    <!-- Market stat strip -->
+    <div style="display:flex;align-items:center;gap:0;border-bottom:1px solid #1f2a33;background:#0b1116;padding:0 28px;">
+      <div style="padding:11px 22px 11px 0;border-right:1px solid #1a242c;margin-right:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.1em;">DERNIER</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:18px;color:#3fd1bd;margin-top:3px;">1.0851</div>
+      </div>
+      <div style="padding:11px 22px 11px 0;margin-right:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.1em;">24H Δ</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px;color:#3fd1bd;margin-top:5px;">+0.10% <span style="color:#5f6c78;">+0.0011</span></div>
+      </div>
+      <div style="padding:11px 22px 11px 0;margin-right:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.1em;">24H HAUT</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px;color:#9aa6b2;margin-top:5px;">1.0869</div>
+      </div>
+      <div style="padding:11px 22px 11px 0;margin-right:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.1em;">24H BAS</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px;color:#9aa6b2;margin-top:5px;">1.0832</div>
+      </div>
+      <div style="padding:11px 22px 11px 0;margin-right:22px;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.1em;">VOL 24H (PAQUETS)</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px;color:#9aa6b2;margin-top:5px;">18,402</div>
+      </div>
+      <div style="padding:11px 0;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.1em;">TAILLE PAQUET</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:14px;color:#9aa6b2;margin-top:5px;">1 long + 1 short</div>
+      </div>
+    </div>
+
+    <!-- Trading grid -->
+    <div style="padding:18px 28px 40px;display:grid;grid-template-columns:300px 1fr 308px;gap:16px;align-items:start;">
+
+      <!-- ===== ORDER BOOK ===== -->
+      <section style="border:1px solid #1f2a33;border-radius:8px;overflow:hidden;background:#151c23;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #1f2a33;background:#0f161c;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#9aa6b2;">CARNET D'ORDRES</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#566370;">0.0001</span>
+        </div>
+        <!-- column heads -->
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;padding:7px 14px;border-bottom:1px solid #1a232b;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.08em;color:#566370;">
+          <span>PRIX</span><span style="text-align:right;">PAQUETS</span><span style="text-align:right;">CUMUL</span>
+        </div>
+
+        <!-- ASKS (sell side) -->
+        <div style="padding:2px 0;">
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:62%;background:rgba(224,72,79,0.10);"></div>
+            <span style="color:#e0848a;position:relative;">1.0857</span><span style="text-align:right;color:#c2cdd6;position:relative;">412</span><span style="text-align:right;color:#7d8b97;position:relative;">2,140</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:50%;background:rgba(224,72,79,0.10);"></div>
+            <span style="color:#e0848a;position:relative;">1.0856</span><span style="text-align:right;color:#c2cdd6;position:relative;">355</span><span style="text-align:right;color:#7d8b97;position:relative;">1,728</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:40%;background:rgba(224,72,79,0.10);"></div>
+            <span style="color:#e0848a;position:relative;">1.0855</span><span style="text-align:right;color:#c2cdd6;position:relative;">288</span><span style="text-align:right;color:#7d8b97;position:relative;">1,373</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:28%;background:rgba(224,72,79,0.10);"></div>
+            <span style="color:#e0848a;position:relative;">1.0854</span><span style="text-align:right;color:#c2cdd6;position:relative;">196</span><span style="text-align:right;color:#7d8b97;position:relative;">1,085</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:18%;background:rgba(224,72,79,0.10);"></div>
+            <span style="color:#e0848a;position:relative;">1.0853</span><span style="text-align:right;color:#c2cdd6;position:relative;">131</span><span style="text-align:right;color:#7d8b97;position:relative;">889</span>
+          </div>
+        </div>
+
+        <!-- spread / mid -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 14px;background:#0f161c;border-top:1px solid #1a232b;border-bottom:1px solid #1a232b;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:14px;color:#3fd1bd;font-variant-numeric:tabular-nums;">1.0851</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">spread 0.0002 · 1.8 bp</span>
+        </div>
+
+        <!-- BIDS (buy side) -->
+        <div style="padding:2px 0;">
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:22%;background:rgba(63,209,189,0.10);"></div>
+            <span style="color:#3fd1bd;position:relative;">1.0850</span><span style="text-align:right;color:#c2cdd6;position:relative;">174</span><span style="text-align:right;color:#7d8b97;position:relative;">174</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:34%;background:rgba(63,209,189,0.10);"></div>
+            <span style="color:#3fd1bd;position:relative;">1.0849</span><span style="text-align:right;color:#c2cdd6;position:relative;">242</span><span style="text-align:right;color:#7d8b97;position:relative;">416</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:46%;background:rgba(63,209,189,0.10);"></div>
+            <span style="color:#3fd1bd;position:relative;">1.0848</span><span style="text-align:right;color:#c2cdd6;position:relative;">309</span><span style="text-align:right;color:#7d8b97;position:relative;">725</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:58%;background:rgba(63,209,189,0.10);"></div>
+            <span style="color:#3fd1bd;position:relative;">1.0847</span><span style="text-align:right;color:#c2cdd6;position:relative;">377</span><span style="text-align:right;color:#7d8b97;position:relative;">1,102</span>
+          </div>
+          <div style="position:relative;display:grid;grid-template-columns:1fr 1fr 1fr;padding:4px 14px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;">
+            <div style="position:absolute;right:0;top:0;bottom:0;width:70%;background:rgba(63,209,189,0.10);"></div>
+            <span style="color:#3fd1bd;position:relative;">1.0846</span><span style="text-align:right;color:#c2cdd6;position:relative;">431</span><span style="text-align:right;color:#7d8b97;position:relative;">1,533</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===== CENTER: chart + trades ===== -->
+      <div style="display:flex;flex-direction:column;gap:16px;min-width:0;">
+        <!-- chart placeholder -->
+        <section style="border:1px solid #1f2a33;border-radius:8px;overflow:hidden;background:#151c23;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #1f2a33;background:#0f161c;">
+            <div style="display:flex;align-items:center;gap:12px;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#9aa6b2;">cEUR/USD</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#3fd1bd;border:1px solid #234039;border-radius:3px;padding:1px 6px;">1m</span>
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">5m · 15m · 1h · 4h</span>
+            </div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#566370;">P₀ 1.0842 · floor reset 1.50%</span>
+          </div>
+          <div style="height:260px;background:repeating-linear-gradient(135deg,#121920 0 9px,#141c23 9px 18px);position:relative;display:flex;align-items:center;justify-content:center;">
+            <div style="position:absolute;left:0;right:0;top:42%;height:1px;background:rgba(63,209,189,0.35);"></div>
+            <div style="position:absolute;right:14px;top:calc(42% - 9px);font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#3fd1bd;background:#0e1419;padding:1px 5px;border:1px solid #234039;border-radius:3px;">P₀ 1.0842</div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;letter-spacing:0.1em;color:#3a4651;border:1px dashed #2a3640;border-radius:6px;padding:9px 16px;background:rgba(14,20,25,0.6);">[ PRICE CHART — placeholder ]</div>
+          </div>
+        </section>
+
+        <!-- recent trades -->
+        <section style="border:1px solid #1f2a33;border-radius:8px;overflow:hidden;background:#151c23;">
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 16px;border-bottom:1px solid #1f2a33;background:#0f161c;">
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#9aa6b2;">TRADES RÉCENTS</span>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#566370;">paquets intacts only</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:7px 16px;border-bottom:1px solid #1a232b;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:0.08em;color:#566370;">
+            <span>HEURE</span><span style="text-align:right;">PRIX</span><span style="text-align:right;">PAQUETS</span><span style="text-align:right;">CÔTÉ</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:5px 16px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;border-bottom:1px solid #161e25;"><span style="color:#9aa6b2;">14:32:06</span><span style="text-align:right;color:#3fd1bd;">1.0851</span><span style="text-align:right;color:#c2cdd6;">64</span><span style="text-align:right;color:#3fd1bd;">BUY</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:5px 16px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;border-bottom:1px solid #161e25;"><span style="color:#9aa6b2;">14:32:04</span><span style="text-align:right;color:#e0848a;">1.0850</span><span style="text-align:right;color:#c2cdd6;">120</span><span style="text-align:right;color:#e0848a;">SELL</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:5px 16px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;border-bottom:1px solid #161e25;"><span style="color:#9aa6b2;">14:32:01</span><span style="text-align:right;color:#3fd1bd;">1.0851</span><span style="text-align:right;color:#c2cdd6;">38</span><span style="text-align:right;color:#3fd1bd;">BUY</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:5px 16px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;border-bottom:1px solid #161e25;"><span style="color:#9aa6b2;">14:31:58</span><span style="text-align:right;color:#3fd1bd;">1.0851</span><span style="text-align:right;color:#c2cdd6;">205</span><span style="text-align:right;color:#3fd1bd;">BUY</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:5px 16px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;border-bottom:1px solid #161e25;"><span style="color:#9aa6b2;">14:31:55</span><span style="text-align:right;color:#e0848a;">1.0850</span><span style="text-align:right;color:#c2cdd6;">91</span><span style="text-align:right;color:#e0848a;">SELL</span></div>
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;padding:5px 16px;font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-variant-numeric:tabular-nums;"><span style="color:#9aa6b2;">14:31:52</span><span style="text-align:right;color:#e0848a;">1.0849</span><span style="text-align:right;color:#c2cdd6;">47</span><span style="text-align:right;color:#e0848a;">SELL</span></div>
+        </section>
+      </div>
+
+      <!-- ===== TRADE TICKET ===== -->
+      <section style="border:1px solid #1f2a33;border-radius:8px;overflow:hidden;background:#151c23;">
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:11px 14px;border-bottom:1px solid #1f2a33;background:#0f161c;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;letter-spacing:0.12em;color:#9aa6b2;">TICKET DE TRADE</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#566370;">coupled coin</span>
+        </div>
+
+        <div style="padding:14px;">
+          <!-- Buy/Sell toggle -->
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;">
+            <div style="text-align:center;padding:10px 0;border-radius:6px;background:#102420;border:1px solid #3fd1bd;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#3fd1bd;font-weight:600;">BUY</div>
+            <div style="text-align:center;padding:10px 0;border-radius:6px;background:#11181e;border:1px solid #28333d;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.08em;color:#7d8b97;">SELL</div>
+          </div>
+
+          <!-- Order type -->
+          <div style="display:flex;gap:14px;margin-bottom:14px;font-family:'IBM Plex Mono',monospace;font-size:11px;">
+            <span style="color:#3fd1bd;border-bottom:1.5px solid #3fd1bd;padding-bottom:4px;">LIMIT</span>
+            <span style="color:#7d8b97;padding-bottom:4px;">MARKET</span>
+            <span style="color:#7d8b97;padding-bottom:4px;">STOP</span>
+          </div>
+
+          <!-- Price field -->
+          <div style="margin-bottom:11px;">
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.08em;margin-bottom:6px;">PRIX LIMITE</div>
+            <div style="display:flex;align-items:center;border:1px solid #28333d;border-radius:6px;background:#0f161c;padding:0 12px;">
+              <input value="1.0851" readonly style="flex:1;background:transparent;border:0;outline:0;color:#e7ecf1;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:15px;padding:11px 0;width:100%;" />
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">USD</span>
+            </div>
+          </div>
+
+          <!-- Quantity field (packets) -->
+          <div style="margin-bottom:7px;">
+            <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#6b7884;letter-spacing:0.08em;margin-bottom:6px;"><span>QUANTITÉ</span><span style="color:#3fd1bd;">PAQUETS INTACTS</span></div>
+            <div style="display:flex;align-items:center;border:1px solid #28333d;border-radius:6px;background:#0f161c;padding:0 12px;">
+              <input value="500" readonly style="flex:1;background:transparent;border:0;outline:0;color:#e7ecf1;font-family:'IBM Plex Mono',monospace;font-variant-numeric:tabular-nums;font-size:15px;padding:11px 0;width:100%;" />
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#566370;">pkt</span>
+            </div>
+          </div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9.5px;color:#566370;margin-bottom:12px;line-height:1.5;">1 paquet = 1 long + 1 short · les coins ne bougent qu'en paquets intacts</div>
+
+          <!-- Percent presets -->
+          <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:16px;">
+            <div style="text-align:center;padding:6px 0;border:1px solid #28333d;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#9aa6b2;">25%</div>
+            <div style="text-align:center;padding:6px 0;border:1px solid #28333d;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#9aa6b2;">50%</div>
+            <div style="text-align:center;padding:6px 0;border:1px solid #28333d;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#9aa6b2;">75%</div>
+            <div style="text-align:center;padding:6px 0;border:1px solid #28333d;border-radius:5px;font-family:'IBM Plex Mono',monospace;font-size:10px;color:#9aa6b2;">MAX</div>
+          </div>
+
+          <!-- Summary -->
+          <div style="border:1px solid #1f2a33;border-radius:6px;background:#0f161c;padding:11px 13px;margin-bottom:14px;">
+            <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;margin-bottom:7px;"><span style="color:#7d8b97;">Notionnel long V_A</span><span style="color:#c2cdd6;font-variant-numeric:tabular-nums;">€271,275</span></div>
+            <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;margin-bottom:7px;"><span style="color:#7d8b97;">Notionnel short V_B</span><span style="color:#c2cdd6;font-variant-numeric:tabular-nums;">€271,275</span></div>
+            <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;margin-bottom:7px;"><span style="color:#7d8b97;">Delta net</span><span style="color:#3fd1bd;font-variant-numeric:tabular-nums;">≈ 0.00 (neutre)</span></div>
+            <div style="display:flex;justify-content:space-between;font-family:'IBM Plex Mono',monospace;font-size:11px;padding-top:7px;border-top:1px solid #1a232b;"><span style="color:#9aa6b2;">Frais estimés</span><span style="color:#c2cdd6;font-variant-numeric:tabular-nums;">€27.13</span></div>
+          </div>
+
+          <!-- Submit (disabled / mock) -->
+          <div style="text-align:center;padding:13px 0;border-radius:6px;background:#1f8a7d;color:#06110f;font-family:'IBM Plex Mono',monospace;font-size:12px;letter-spacing:0.1em;font-weight:600;opacity:0.55;">PLACER L'ORDRE BUY</div>
+          <div style="text-align:center;font-family:'IBM Plex Mono',monospace;font-size:9px;color:#566370;letter-spacing:0.1em;margin-top:9px;">DÉSACTIVÉ · MOCKUP NON FONCTIONNEL</div>
+        </div>
+      </section>
+
+    </div>
+  </main>
+</div>
+</body>
+</html>

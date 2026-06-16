@@ -1,0 +1,81 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+env:
+  # Non-interactive corepack so it provisions pnpm@<packageManager> without prompting.
+  COREPACK_ENABLE_DOWNLOAD_PROMPT: 0
+
+jobs:
+  prod-typescript:
+    name: PROD TypeScript (typecheck, lint, test) + regime guard
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: rose
+          POSTGRES_PASSWORD: rose
+          POSTGRES_DB: rose_engine
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U rose -d rose_engine"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # The ledger integration tests and migration check connect here (CI service on 5432).
+      DATABASE_URL: postgres://rose:rose@localhost:5432/rose_engine
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Enable Corepack
+        run: corepack enable
+
+      - uses: actions/setup-node@v4
+        with:
+          # Architecture target: Node 24 LTS (local dev may use 20+; CI is authoritative).
+          node-version: 24
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Typecheck
+        run: pnpm typecheck
+
+      - name: Lint
+        run: pnpm lint
+
+      - name: Unit tests (Vitest)
+        run: pnpm test
+
+      - name: Migration check (forward → down → forward reversibility — NFR-5)
+        run: pnpm check:migrations
+
+      - name: Regime boundary guard (/prod ↮ /throwaway)
+        run: pnpm check:regime
+
+  contracts-foundry:
+    name: PROD Solidity (forge test)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: prod/contracts
+    steps:
+      # OpenZeppelin 5.6.1 and forge-std are vendored (committed) under prod/contracts/lib —
+      # NOT git submodules (the repo uses no submodules), so a plain checkout has the deps.
+      - uses: actions/checkout@v4
+
+      - name: Install Foundry
+        uses: foundry-rs/foundry-toolchain@v1
+
+      - name: Forge build
+        run: forge build
+
+      - name: Forge test
+        run: forge test -vvv

@@ -1,0 +1,12 @@
+node_modules
+dist
+.turbo
+coverage
+pnpm-lock.yaml
+prod/contracts/out
+prod/contracts/cache
+prod/contracts/lib
+_bmad
+_bmad-output
+docs
+throwaway/mockups
