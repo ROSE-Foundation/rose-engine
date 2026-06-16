@@ -20,8 +20,14 @@ export * from './spec/load-rule-spec.js';
 // relative to the running module, and the JSON is not copied into `dist/` by `tsc`, so a built
 // consumer must not depend on reading it via the package entry point.
 export * from './codegen/generate-off-chain-policy.js';
-// Conformance: shared vectors + reusable harness + reference off-chain adapter.
+// Codegen: derive the on-chain compliance config from the SAME spec (Story 4.5). Consumers call
+// `generateOnChainComplianceConfig(ruleSpecV1)` directly; the committed JSON artifact + the
+// generated Solidity library under `prod/contracts/src/generated/` are the on-disk hand-offs
+// (drift-guarded). The artifact PATHs are intentionally NOT re-exported (module-relative, not in `dist/`).
+export * from './codegen/generate-on-chain-config.js';
+// Conformance: shared vectors + reusable harness + reference off-chain AND on-chain adapters.
 export * from './conformance/types.js';
 export * from './conformance/vectors.js';
 export * from './conformance/harness.js';
 export * from './conformance/reference-off-chain-adapter.js';
+export * from './conformance/reference-on-chain-adapter.js';

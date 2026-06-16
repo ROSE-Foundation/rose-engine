@@ -1,0 +1,89 @@
+{
+  "_generated": {
+    "source": "rule-spec.v1",
+    "version": "1.0.0",
+    "generator": "@rose/rule-spec/codegen/generate-on-chain-config"
+  },
+  "version": "1.0.0",
+  "defaultEffect": "DENY",
+  "eligibility": {
+    "requireAllowlist": true,
+    "requiredClaimTopics": [
+      {
+        "label": "ONCHAINID_KYC",
+        "derivation": "uint256(keccak256(utf8(label)))"
+      }
+    ]
+  },
+  "coupling": {
+    "atomicPairedMintBurn": true,
+    "singleLegForbidden": true
+  },
+  "modelA": {
+    "protectedAccountType": "CLIENT_COLLATERAL",
+    "protectedClassification": "PRINCIPAL",
+    "rule": "PRINCIPAL_MUST_NOT_LEAVE_CLIENT",
+    "allowedDestination": "CLIENT_ACCOUNT"
+  },
+  "allowFlows": [
+    {
+      "id": "allow-backing-float-egress",
+      "from": {
+        "accountType": "BACKING_FLOAT",
+        "classification": "NONE"
+      },
+      "to": "EXTERNAL",
+      "effect": "ALLOW"
+    },
+    {
+      "id": "allow-client-principal-within-client",
+      "from": {
+        "accountType": "CLIENT_COLLATERAL",
+        "classification": "PRINCIPAL"
+      },
+      "to": "CLIENT_ACCOUNT",
+      "effect": "ALLOW"
+    },
+    {
+      "id": "allow-client-yield-to-treasury",
+      "from": {
+        "accountType": "CLIENT_COLLATERAL",
+        "classification": "YIELD"
+      },
+      "to": "TREASURY",
+      "effect": "ALLOW"
+    },
+    {
+      "id": "allow-fee-income-to-treasury",
+      "from": {
+        "accountType": "FEE_INCOME",
+        "classification": "NONE"
+      },
+      "to": "TREASURY",
+      "effect": "ALLOW"
+    }
+  ],
+  "prohibitions": [
+    {
+      "id": "prohibit-model-a-principal-egress",
+      "kind": "PRINCIPAL_EGRESS",
+      "protectedAccountType": "CLIENT_COLLATERAL",
+      "protectedClassification": "PRINCIPAL",
+      "allowedDestination": "CLIENT_ACCOUNT"
+    },
+    {
+      "id": "prohibit-token-flow-through-vcc",
+      "kind": "ROUTE_THROUGH_ENTITY",
+      "entity": "VCC",
+      "assetKind": "TOKEN"
+    }
+  ],
+  "floorGuards": [
+    {
+      "id": "floor-allow-backing-float-egress",
+      "allowRuleId": "allow-backing-float-egress",
+      "accountType": "BACKING_FLOAT",
+      "floorConfigKey": "backing_float.floor"
+    }
+  ]
+}

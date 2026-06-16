@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-15
-last_updated: 2026-06-16T12:30
+last_updated: 2026-06-16T21:15
 project: rose-engine
 project_key: NOKEY
 tracking_system: file-system
@@ -69,13 +69,13 @@ development_status:
   epic-3-retrospective: optional
 
   # Epic 4: On-Chain Permissioned Tokens & Compliance (ERC-3643 on Sepolia)
-  epic-4: backlog
-  4-1-stand-up-onchainid-identity-and-eligibility-infrastructure: backlog
-  4-2-enforce-eligibility-on-transfers-in-the-custom-erc-3643-compatible-token: backlog
-  4-3-enforce-pair-coupling-on-chain-atomic-paired-mint-burn-single-leg-impossible: backlog
-  4-4-enforce-the-model-a-bright-line-and-principal-yield-distinction-on-chain: backlog
-  4-5-generate-on-chain-compliance-config-from-the-rule-spec-and-pass-dual-plane-conformance: backlog
-  4-6-provide-gated-transfer-agent-powers-and-deploy-to-sepolia: backlog
+  epic-4: done
+  4-1-stand-up-onchainid-identity-and-eligibility-infrastructure: done
+  4-2-enforce-eligibility-on-transfers-in-the-custom-erc-3643-compatible-token: done
+  4-3-enforce-pair-coupling-on-chain-atomic-paired-mint-burn-single-leg-impossible: done
+  4-4-enforce-the-model-a-bright-line-and-principal-yield-distinction-on-chain: done
+  4-5-generate-on-chain-compliance-config-from-the-rule-spec-and-pass-dual-plane-conformance: done
+  4-6-provide-gated-transfer-agent-powers-and-deploy-to-sepolia: done
   epic-4-retrospective: optional
 
   # Epic 5: Ledger↔Chain Integration — Mint, Burn & Reconciliation

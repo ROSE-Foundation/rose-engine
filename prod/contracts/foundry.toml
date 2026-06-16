@@ -8,4 +8,10 @@ evm_version = "cancun"
 optimizer = true
 optimizer_runs = 200
 
+# `src/generated/**` is emitted byte-for-byte by the `@rose/rule-spec` codegen (Story 4.5) and is
+# the canonical source of those files (a Vitest drift guard enforces it). Exclude it from `forge fmt`
+# so the formatter does not contend with the generator; the files MUST still compile.
+[fmt]
+ignore = ["src/generated/**/*.sol"]
+
 # See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options

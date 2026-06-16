@@ -309,3 +309,236 @@ Acceptance Auditor confirmed both ACs MET with non-vacuous evidence; no scope cr
 - The off-chain plane is the **conformance baseline**: Epic 4's on-chain compliance config must be generated from the SAME rule-spec and pass the SAME 10 vectors via an on-chain `PlaneAdapter` (the `ON_CHAIN`-tagged vectors already exist).
 - The **authoritative Model-A principal/yield bright line** moves on-chain (segregated principal sub-positions), closing the off-chain `classification`/`destinationKind` trust residual.
 - Migration count is now **6**; the rule-spec single-source + drift guard remain the contract both planes derive from.
+
+---
+
+# BMAD Cycle Report — Story 4.1: Stand up ONCHAINID identity and eligibility infrastructure (FIRST of Epic 4)
+
+## Outcome at a glance
+
+- **Status:** done. First on-chain story of Epic 4; `epic-4` → in-progress.
+- **Plane:** Solidity / Foundry (`prod/contracts`). TypeScript packages untouched — Vitest stays **263/263**.
+- **Forge tests:** **60/60** (3 pre-existing scaffold + 50 authored + 7 review-regression).
+- **Full gate green:** `pnpm typecheck`, `pnpm lint`, `pnpm test` (263), `pnpm check:regime`, `pnpm check:migrations` (6), `pnpm format:check`, and `forge test` (60).
+
+## What was built (FR-19 foundation — identity + eligibility, no transfer enforcement yet)
+
+A self-contained ONCHAINID / ERC-3643 identity stack on OpenZeppelin 5.6.1, under `prod/contracts/src/identity/`:
+
+- **`Identity.sol`** — ONCHAINID (ERC-734 keys + ERC-735 claims): purpose-based key mgmt (MANAGEMENT/ACTION/CLAIM), deterministic `claimId = keccak256(abi.encode(issuer, topic))`, management-gated mutations.
+- **`ClaimIssuer.sol`** — trusted claim issuer: ECDSA-signed claim validation (`isClaimValid` via OZ `ECDSA.tryRecover` + `MessageHashUtils`) and signature-keyed revocation; fail-closed on bad signatures.
+- **`ClaimTopicsRegistry.sol`** / **`TrustedIssuersRegistry.sol`** — owner-curated required topics and per-topic trusted issuers (EnumerableSet-backed, dup/empty rejection, bounded).
+- **`IdentityRegistry.sol`** (+ **`AgentRole.sol`**) — the **curated allowlist** (agent-gated registration) plus the **fail-closed `isVerified`** predicate that joins all three registries; this is the eligibility decision the token will enforce in 4.2.
+- **`ClaimTopics.sol`** — pins `ONCHAINID_KYC = uint256(keccak256("ONCHAINID_KYC"))` to `@rose/rule-spec` `eligibility.requiredClaimTopics`, with an explicit note that **Story 4.5** will generate (not hand-pin) this mapping.
+- 7 interfaces + 6 Foundry test files (incl. 2 fuzz tests + a reverting-identity mock).
+
+## How it ran (the pipeline)
+
+**create-story** produced an architecture-cited, tightly-scoped spec (ERC-734/735 + ERC-3643 patterns, OZ 5.6, fail-closed, rule-spec alignment; explicit OUT-of-scope list for 4.2–4.6). **dev-story** implemented the suite and drove `forge test` 53→ green plus the full TS gate. **code-review** ran **3 parallel adversarial layers** (Blind Hunter correctness, Edge-Case Hunter, Acceptance Auditor). Acceptance Auditor: **PASS** on all ACs, no scope creep, rule-spec unmodified.
+
+## Notable review decisions
+
+- **Patched (4, +7 regression tests → 60 forge):**
+  1. **[High] last-management-key brick** — `Identity.removeKey` could remove the only MANAGEMENT key, permanently locking the identity. Guarded (matches ONCHAINID reference).
+  2. **[Med] `isVerified` not truly total** — holder-identity calls (`getClaimIdsByTopic`/`getClaim`) weren't try/catch-wrapped, so a hostile registered identity could turn the eligibility predicate into a revert (DoS). Now fully wrapped — `isVerified` always returns a bool.
+  3. **[Med] EOA trusted issuer** — `addTrustedIssuer` now requires the issuer address to have code (a codeless issuer would make `isVerified` revert uncatchably).
+  4. **[Low] `addKey` event/storage divergence** — `KeyAdded` now emits the stored `keyType` for an already-registered key.
+- **Resolved a layer disagreement by reading source:** Edge-Case Hunter's "[High] EIP-2098 compact-signature revocation bypass" was **dismissed as a false positive** — the installed OZ 5.6.1 `ECDSA.tryRecover(bytes32,bytes)` rejects any non-65-byte signature (`InvalidSignatureLength`); Blind Hunter was correct.
+- **Deferred (documented in `deferred-work.md`):** empty-required-topics ⇒ verified (ERC-3643 semantics; rule-spec is `.min(1)`, topics seeded in 4.5); unbounded claims-per-topic (self-griefing OOG; revisit when `isVerified` gates transfers in 4.2); no EIP-1271 contract-signer issuers (P0 uses an EOA signing key).
+
+## Carry-forward / interface points for Stories 4.2 → 4.6
+
+- **4.2 (enforce eligibility on transfers):** consume `IIdentityRegistry.isVerified(address)` in the token's transfer hook. It is now **total/fail-closed** (never reverts), safe to call inline; mind the self-griefing claim-count OOG note when it becomes hot-path.
+- **4.5 (rule-spec → on-chain codegen + dual-plane conformance):** replace the hand-pinned `ClaimTopics.ONCHAINID_KYC` with a generated constant and seed `ClaimTopicsRegistry` from `@rose/rule-spec`; the topic id (`uint256(keccak256("ONCHAINID_KYC"))`) and the curated-allowlist == `IdentityRegistry` mapping are the agreed equivalences. The empty-topics hardening lands here.
+- **4.6 (agent powers + Sepolia deploy):** `AgentRole` is in place (addAgent/removeAgent/onlyAgent) as the gating primitive; forced-transfer/recovery/freeze/pause and the `forge script` deploy are NOT in 4.1.
+- **Registries are constructor-wired** (`IdentityRegistry(owner, claimTopicsRegistry, trustedIssuersRegistry)`) — the deploy script in 4.6 must deploy the two registries first, then the registry, then `addAgent` the claim-issuer operator and the token.
+
+---
+
+# Story 4.2 — Enforce eligibility on transfers in the custom ERC-3643-compatible token
+
+**Status: done** · pipeline: create-story → dev-story → code-review · 2026-06-16
+
+## Outcome
+
+Delivered `RoseToken`, the base custom ERC-3643-compatible token (OZ 5.6.1 `ERC20` + `Ownable`). A single override of `_update` is the eligibility chokepoint: it consults the Story-4.1 `IIdentityRegistry.isVerified` so tokens can only land on, or leave, verified holders (fail-closed, NFR-4). Because OZ-5 routes `transfer`, `transferFrom`, `_mint`, and `_burn` through `_update`, one override gates them all. `_update` is left `virtual` for Stories 4.3 (coupling) / 4.4 (Model-A).
+
+## Files
+
+- `prod/contracts/src/token/interface/IRoseToken.sol` (new) — `is IERC20`; adds `identityRegistry()`, `setIdentityRegistry`, `mint`, `burn`, `IdentityRegistrySet` event.
+- `prod/contracts/src/token/RoseToken.sol` (new) — eligibility-gated `_update`; owner-gated `mint`/`burn`/`setIdentityRegistry`.
+- `prod/contracts/test/token/RoseToken.t.sol` (new) — 17 Foundry tests (incl. 2 fuzz) reusing the 4.1 `ClaimFixtures` + identity-stack harness.
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, `deferred-work.md`, this report (updated).
+
+## Gates
+
+Vitest **263/263** (unchanged — Solidity-only story), forge **77/77** (baseline 60 → +17), typecheck / lint / check:regime / check:migrations / format:check all green, `forge fmt --check` clean.
+
+## Notable review decisions
+
+- **3 parallel adversarial layers.** Acceptance Auditor: **PASS on AC-1 and AC-2**, no scope creep, `@rose/rule-spec` unmodified.
+- **Patched (1, +1 regression test → forge 77):** the both-sides check also gated owner-driven `burn`, so a revoked/de-listed holder's balance was stranded — untransferable AND unburnable. Both adversarial layers flagged it. Fix: exempt burn (`to == 0`) from the sender check (canonical ERC-3643) so the issuer can reduce a non-compliant holder's supply; real transfers still check BOTH parties, mint still checks the recipient. Regression `test_Burn_Succeeds_AfterHolderRevoked`. Side benefit: the burn path no longer loops a holder's (uncapped) claims, shrinking the OOG blast radius back to holder-self-griefing-only.
+- **Dismissed (2):** reentrancy via `isVerified` (it is `view`/STATICCALL, registry calls try/catch-wrapped — no token-state mutation); zero-value transfer to an unverified recipient reverts (by-design fail-closed, NFR-4).
+- **Deferred (4, in `deferred-work.md`):** no forced-transfer/recovery + no pause/freeze (Story 4.6); `setIdentityRegistry` has no holder-continuity check (owner-trusted, recoverable, mirrors T-REX); `Ownable` single-key admin / `renounceOwnership` footgun / no role separation (4.6 + ops); unbounded claims-per-topic OOG on the transfer hot path (revisit with 4.6 recovery).
+
+## Carry-forward / interface points for Stories 4.3 → 4.6
+
+- **4.3 (pair coupling, atomic mint/burn):** extend `RoseToken._update` (kept `virtual`) to add both-or-neither leg coupling; the eligibility gate already lives there, so coupling logic layers on top of `super._update`.
+- **4.4 (Model-A principal/yield):** same `_update` extension point; add segregated principal sub-positions and block principal egress alongside the eligibility check.
+- **4.5 (rule-spec → on-chain codegen):** the token binds to the registry by constructor reference today; 4.5 generates the registry/topic config from `@rose/rule-spec`. No token-side change required beyond wiring the generated registry address.
+- **4.6 (agent powers + Sepolia deploy):** replace/augment `Ownable` `onlyOwner` on `mint`/`burn`/`setIdentityRegistry` with a transfer-agent role; add forced-transfer/recovery/freeze/pause; the `forge script` deploy must deploy the registries, then `RoseToken(name, symbol, identityRegistry, owner)`. The burn-exemption already gives the issuer a supply-reduction lever; recovery-to-new-wallet is 4.6.
+
+---
+
+# Story 4.3 — Enforce pair coupling on-chain (atomic paired mint/burn, single-leg impossible)
+
+**Status: done** · pipeline: create-story → dev-story → code-review · 2026-06-16
+
+## Outcome
+
+Delivered on-chain pair coupling as **two coupled `CoupledLeg` tokens** (each a Story-4.2 eligibility-gated `RoseToken`) coordinated by a **`CoupledPair`** primitive that owns and is the SOLE minter/burner of both legs. `mintPair`/`burnPair` move BOTH legs by the same `uint256 amount` in one transaction — atomic, equal-notional. A single-leg mint/burn is impossible on TWO independent layers: (1) the legs' inherited owner-gated `mint`/`burn` are owned by the pair (an EOA reverts `OwnableUnauthorizedAccount`); (2) `CoupledLeg._update` requires `pairingInProgress()` for any mint (`from==0`) or burn (`to==0`), so even the owner cannot single-leg-emit outside the paired flow. The leg↔coupler cycle is resolved by `CoupledPair` deploying both legs in its constructor with `initialOwner == coupler == address(this)`. `CoupledLeg._update` calls `super._update` LAST so the 4.2 eligibility chokepoint (and the ERC20 mutation) stay intact, and is kept `virtual` for Story 4.4 (Model-A). Per D1, legs are independently transferable (directional/separate holding); coupling is enforced on EMISSION, not transfer — a transfer cannot change either total supply, so it can never break coupling.
+
+## Files
+
+- `prod/contracts/src/token/interface/ICoupledPair.sol` (new) — coupling-primitive surface: `lToken()`/`sToken()` (as `IRoseToken`), `pairingInProgress()`, `mintPair`, `burnPair`; `PairDeployed`/`PairMinted`/`PairBurned` events.
+- `prod/contracts/src/token/CoupledLeg.sol` (new) — `is RoseToken`; immutable `coupler`; `_update` coupling guard layered on 4.2 eligibility (`super._update` last); kept `virtual`.
+- `prod/contracts/src/token/CoupledPair.sol` (new) — `is Ownable, ICoupledPair`; deploys + owns both legs; `_pairing` flag; owner-gated atomic `mintPair`/`burnPair` at equal notional.
+- `prod/contracts/test/token/CoupledPair.t.sol` (new) — 19 Foundry unit + fuzz tests (incl. 3 code-review regressions) reusing the 4.1 `ClaimFixtures` + identity-stack harness.
+- `prod/contracts/test/token/CoupledPairInvariant.t.sol` (new) — handler + 2 invariants (`invariant_LegSuppliesAlwaysEqual`, `invariant_SingleLegMintNeverSucceeds`).
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, `deferred-work.md`, this report (updated).
+
+## Gates
+
+Vitest **263/263** (unchanged — Solidity-only story), forge **98/98** (baseline 77 → +21), typecheck / lint / check:regime / check:migrations / format:check all green, `forge fmt --check` clean. The two invariants ran 256 runs × 500 calls each (256 000 calls total), 0 reverts, supplies always equal.
+
+## Notable review decisions
+
+- **3 parallel adversarial layers.** Acceptance Auditor: **PASS on AC-1 and AC-2**, no scope creep, `@rose/rule-spec` unmodified; the mandatory Foundry invariant proves coupling cannot be broken.
+- **Patched (2 defensive regressions → forge 98):** (a) a zero-address leg target on a paired op must revert ATOMICALLY, never become a silent no-op that desyncs the legs — confirmed safe by construction (OZ `_mint`/`_burn` revert `ERC20InvalidReceiver`/`ERC20InvalidSender` before `_update`) and locked with `test_MintPair_RevertWhen_lToIsZero` / `test_BurnPair_RevertWhen_sFromIsZero`; (b) `burnPair` atomicity under asymmetric balances — `test_BurnPair_RevertWhen_AsymmetricBalance` proves a leg with insufficient balance rolls the other back (both supplies unchanged/equal).
+- **Dismissed (2):** reentrancy while `_pairing == true` (plain OZ ERC20 `_mint` has no recipient callback; `isVerified` is a `view` STATICCALL — no exploitable window); "transfers should be paired too" (by D1, transfers are separate and cannot change supply, so cannot break coupling — eligibility still gates them).
+- **Deferred (3, in `deferred-work.md`):** `CoupledPair` single-key `Ownable` / `renounceOwnership` footgun (Story 4.6 + ops); leg `setIdentityRegistry` not forwarded through the pair (registry frozen post-deploy — safer now; registry-migration path is 4.6); claims-per-topic OOG on the leg mint/transfer hot path (holder-self-griefing only; revisit with 4.6 recovery).
+
+## Carry-forward / interface points for Stories 4.4 → 4.6
+
+- **4.4 (Model-A principal/yield):** extend `CoupledLeg._update` (kept `virtual`) to add segregated principal sub-positions and block principal egress — it layers on the SAME chokepoint, after `super._update` (eligibility) and alongside the coupling guard. The coupling primitive does not constrain Model-A; they compose on `_update`.
+- **4.5 (rule-spec → on-chain codegen + dual-plane conformance):** coupling is expressed STRUCTURALLY here (coupled tokens + paired mint/burn), not via generated config; 4.5 emits eligibility/topic config from `@rose/rule-spec`. The `CoupledPair`/`CoupledLeg` constructors bind to the registry by reference — wire the generated registry address, no coupling-side change required.
+- **4.6 (agent powers + Sepolia deploy):** replace `CoupledPair`'s `onlyOwner` on `mintPair`/`burnPair` with the transfer-agent role; add forced-transfer/recovery/freeze/pause on the legs; wire an owner-gated, continuity-checked leg `setIdentityRegistry` through the pair. The `forge script` deploy: registries → `CoupledPair(registry, lName, lSymbol, sName, sSymbol, owner)` (which deploys both legs) → `addAgent` the operator. `burnPair` already retires a revoked holder's coupled package (burn sender-exempt from 4.2); recovery-to-new-wallet is 4.6.
+- **5.3 / 5.4 (ledger ↔ chain mint/burn):** `mintPair(lTo, sTo, amount)` is the atomic on-chain commit point for paired issuance (FR-18); `burnPair(lFrom, sFrom, amount)` for redemption (FR-21). Both emit `PairMinted`/`PairBurned` for the event-watcher/outbox-saga; the equal-notional `amount` maps to the balanced ledger entry's leg quantities.
+
+---
+
+# Story 4.4 — Enforce the Model-A bright line and principal/yield distinction on-chain
+
+**Pipeline:** create-story → dev-story → code-review (autonomous). **Final status: `done`.**
+
+## What shipped
+
+The on-chain **segregation primitive** a plain fungible token cannot express: a per-holder **segregated principal sub-position** on `CoupledLeg`, plus the **Model-A bright line** enforced on the SAME `_update` chokepoint (eligibility 4.2 → coupling 4.3 → Model-A 4.4). Principal cannot leave a position via transfer; only the yield surplus (`balance − principal`) moves; principal decreases only via an authorized paired burn (redemption), clamped.
+
+## Files
+
+- `prod/contracts/src/token/CoupledLeg.sol` (modified) — segregated `_principal` mapping, `principalOf(holder)`, owner-gated `designatePrincipal`, `_update` extended AFTER `super._update` with the transfer bright line + burn clamp, events `PrincipalDesignated` / `PrincipalReducedOnBurn`; `_update` kept `virtual`.
+- `prod/contracts/src/token/CoupledPair.sol` (modified) — owner-gated forwarders `designateLPrincipal` / `designateSPrincipal` (legs stay sealed from EOAs); `mintPair`/`burnPair`/`_pairing` and `ICoupledPair` untouched.
+- `prod/contracts/test/token/CoupledLegPrincipal.t.sol` (new) — 20 Foundry unit + fuzz tests (incl. 2 code-review regressions) reusing the 4.1 `ClaimFixtures` + identity-stack harness.
+- `prod/contracts/test/token/CoupledLegPrincipalInvariant.t.sol` (new) — handler + 3 invariants (`invariant_PrincipalNeverExceedsBalance`, `invariant_PrincipalEgressNeverSucceeds`, `invariant_LegSuppliesAlwaysEqual`).
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, `deferred-work.md`, this report (updated).
+
+## Gates
+
+Vitest **263/263** (unchanged — Solidity-only story), forge **121/121** (baseline 98 → +23: 20 unit/fuzz + 3 invariants), typecheck / lint / check:regime / check:migrations / format:check all green, `forge fmt --check` clean. The 3 invariants ran 256 runs × 500 calls each (128 000 calls per invariant), 0 reverts.
+
+## Notable review decisions
+
+- **3 parallel adversarial layers.** Acceptance Auditor: **PASS on AC-1 and AC-2**, no scope creep, `@rose/rule-spec` unmodified. Blind Hunter confirmed both headline invariants HOLD and the bright line is reentrancy-robust (absolute post-transfer balance check, no external call in the added code).
+- **Patched (5 → forge 121):** clarity rename of the misleading `totalPrincipal` event param to `holderPrincipal`; strengthened the invariant handler so its assertions are non-trivial (multi-holder-per-leg principal via `designateLPrincipalBob` / `designateSPrincipalAlice`) and S-leg egress is probed (`attemptPrincipalEgressS`); added 2 unit regressions (self-transfer fully-principal, recipient-with-principal yield stacking).
+- **Deferred (3, in `deferred-work.md`):** burn retires principal with no leg-level protection beyond owner+coupling gating (by-design; recovery semantics are 4.6 / Epics 5-7); additive `designatePrincipal` with no release path → owner-trusted lock-up (release/crystallization is reset, Epics 5-7); stranded-principal recovery requires burning the counterparty leg (single-leg recovery is 4.6).
+- **Dismissed (2):** no zero-address/zero-amount guard on `designatePrincipal` (owner-trusted, no-op); overflow reverts with panic `0x11` not the revert string (owner-only ~2²⁵⁶ fat-finger).
+
+## Carry-forward / interface points for Stories 4.5 → 4.6
+
+- **4.5 (rule-spec → on-chain codegen + dual-plane conformance):** Model-A is expressed STRUCTURALLY here (segregated principal sub-position + chokepoint guard), not via generated config; 4.5 emits the on-chain compliance config from `@rose/rule-spec` and runs dual-plane vectors against it. The off-chain analogue (reject `CLIENT_COLLATERAL` principal egress, allow yield) already shipped in Story 3.4 — 4.5 proves the two planes agree. No principal-side contract change is required for codegen; bind the generated config by reference.
+- **4.6 (agent powers + Sepolia deploy):** the principal primitive needs an owner-gated, role-restricted **release / forced-burn / recovery** path — `designatePrincipal` is additive-only by design, so reclassifying or releasing principal (and recovering a revoked holder's principal to a new wallet without burning the counterparty leg) lands with the transfer-agent role. The reset / P&L crystallization that makes yield withdrawable vs principal (D1a) is **Epics 5-7**, built ON this primitive.
+- **5.3 / 5.4 (ledger ↔ chain):** at subscription, the issuer mints collateral then `designate{L,S}Principal` marks the principal portion (a separate owner step from `mintPair`); yield accrues as undesignated movable balance. `PrincipalDesignated` / `PrincipalReducedOnBurn` events feed the event-watcher/outbox so the off-chain ledger reconciles the principal/yield split toward the chain (D3, chain = source of truth).
+
+---
+
+# Story 4.5 — Generate on-chain compliance config from the rule-spec and pass dual-plane conformance
+
+**Pipeline:** create-story → dev-story → code-review (autonomous). **Final status: `done`.**
+
+## What shipped
+
+The pivot that proves FR-19: both authorization planes derive from ONE source. A new on-chain codegen emitter (`generateOnChainComplianceConfig`, symmetric to `generateOffChainPolicy`) derives the on-chain compliance config from `ruleSpecV1` — as a committed JSON artifact AND a generated Solidity library (`GeneratedComplianceConfig.sol`), both drift-guarded. The hand-pinned `ClaimTopics.ONCHAINID_KYC` (4.1) now re-exports the GENERATED value; the `ClaimTopicsRegistry` is seeded via the generated `seedClaimTopics` primitive; the deferred "≥1 required topic" fail-closed hardening landed in `IdentityRegistry.isVerified`. A reference ON_CHAIN `PlaneAdapter` runs the SAME 10 shared conformance vectors through the existing harness and decides IDENTICALLY to the off-chain plane (cross-plane equivalence, SM-4).
+
+## Files
+
+- `prod/packages/rule-spec/src/codegen/generate-on-chain-config.ts` (new) — `generateOnChainComplianceConfig` + `OnChainComplianceConfig` types + `serializeOnChainConfig`; reuses the off-chain `FlowPermissionRule`/`Prohibition`/`FloorGuard` vocabulary.
+- `prod/packages/rule-spec/src/codegen/generate-on-chain-solidity.ts` (new) — `generateOnChainSolidityConfig` emits the `GeneratedComplianceConfig` library (topic constants via `uint256(keccak256(label))`, `requiredClaimTopics()`, coupling/allowlist flags, `seedClaimTopics`).
+- `prod/packages/rule-spec/src/conformance/reference-on-chain-adapter.ts` (new) — `makeReferenceOnChainAdapter` (plane `ON_CHAIN`), fail-closed resolution identical to the off-chain reference adapter.
+- `prod/packages/rule-spec/src/codegen/generate-on-chain-config.test.ts`, `generate-on-chain-solidity.test.ts`, `generated-on-chain-artifact-drift.test.ts`, `conformance/dual-plane-conformance.test.ts` (new) — codegen unit tests, JSON + Solidity drift guards, dual-plane + cross-plane equivalence.
+- `prod/packages/rule-spec/src/codegen/generated/on-chain-compliance.generated.json` (new, GENERATED).
+- `prod/packages/rule-spec/src/codegen/cli.ts`, `codegen/paths.ts`, `index.ts` (modified) — emit both planes; new artifact paths; new exports.
+- `prod/contracts/src/generated/GeneratedComplianceConfig.sol` (new, GENERATED) + `prod/contracts/test/generated/GeneratedComplianceConfig.t.sol` (new — 8 tests: topic == keccak, seeding, dual-plane eligibility on real contracts, ≥1-topic hardening).
+- `prod/contracts/src/identity/ClaimTopics.sol` (constant ← generated), `src/identity/IdentityRegistry.sol` (≥1-topic fail-closed), `test/identity/IdentityRegistry.t.sol` (empty-topics test inverted), `foundry.toml` (`[fmt] ignore` for `src/generated/**`) (modified).
+- `_bmad-output/implementation-artifacts/sprint-status.yaml`, this report (updated).
+
+## Gates
+
+Vitest **302/302** (baseline 263 → +39: on-chain codegen unit + Solidity-generator + drift + dual-plane/cross-plane). forge **129/129** (baseline 121 → +8 in `GeneratedComplianceConfig.t.sol`; one existing test inverted to the hardened empty-topics behavior). typecheck / lint / check:regime / check:migrations / format:check all green, `forge fmt --check` clean. The SAME 10 shared vectors pass on BOTH planes with identical decisions.
+
+## Notable review decisions
+
+- **3 parallel adversarial layers.** Acceptance Auditor: **PASS on AC-1 and AC-2**, no scope creep, `ruleSpecV1`/`conformanceVectors`/`CoupledLeg`/`CoupledPair` untouched, no new runtime dependency. Blind Hunter: no logic defects (emitter mirrors the proven off-chain one; adapter resolution identical; hardening correctly ordered; `paths.ts` resolves under src + dist).
+- **Patched (1 → Vitest 302):** the multi-topic Solidity-generator path (N>1 constants/array/assignments) was unreachable from the P0 single-topic spec — added a 2-topic regression locking constant/array/assignment generation + determinism + identifier-safety throw.
+- **Dismissed (2):** the on-chain adapter intentionally duplicates the off-chain fail-closed resolution (each reads its own artifact type; the cross-plane equivalence test is the divergence tripwire); the cross-plane numeric topic tie is split (Vitest label-match + Forge keccak) by-design to keep keccak256 in the EVM and avoid a hashing dependency.
+- **No new deferrals.** The 4.1 "empty topics ⇒ verified" deferral is RESOLVED here (fail-closed). Prior 4.2/4.3/4.4 `Ownable`/OOG/recovery deferrals remain 4.6 scope.
+
+## Carry-forward / interface points for Story 4.6 (last in Epic 4)
+
+- **Seeding hand-off:** `GeneratedComplianceConfig.seedClaimTopics(ClaimTopicsRegistry)` is the reusable, owner-invoked "amorçage" primitive the 4.6 `forge script` deploy must call (caller MUST be the registry owner — `addClaimTopic` is `onlyOwner`). The deploy wires registries → seed topics → trust issuer → deploy token/pair, then records addresses in config.
+- **Generated config is the single source for deploy params:** `REQUIRE_ALLOWLIST`, `ATOMIC_PAIRED_MINT_BURN`, `SINGLE_LEG_FORBIDDEN`, and `requiredClaimTopics()` are all available to the deploy script from the generated library — do NOT hand-author them in the script.
+- **Agent powers (4.6 core):** forced transfer / recovery / freeze / pause + the transfer-agent role separation land in 4.6; the ≥1-topic hardening + eligibility predicate shipped here are unchanged by that work (agent powers gate WHO can move, not WHETHER a holder is eligible).
+- **Local-only vector execution:** dual-plane conformance runs entirely in `forge test`'s in-process EVM + Vitest — Sepolia/real-network execution (with secrets) is deliberately deferred to 4.6's deploy step.
+
+---
+
+# Story 4.6 — Provide gated transfer-agent powers and deploy to Sepolia
+
+**Pipeline:** create-story → dev-story → code-review (autonomous). **Final status: `done`. Epic 4 → `done` (last story).**
+
+## Deployment-scope decision honored
+
+There are NO Sepolia secrets in the repo. Per the explicit user decision: ALL code (transfer-agent powers + agent powers + the `forge script` deploy) is implemented and proven to the hilt LOCALLY (forge in-process EVM, no `--broadcast`); the REAL Sepolia broadcast is a separate ops step, DEFERRED until secrets are provided out-of-band. NO `.env` created, NO secret/RPC/key placeholder anywhere.
+
+## What shipped
+
+The ERC-3643 transfer-agent agent powers, gated to the reused `AgentRole` transfer-agent role, on `RoseToken` (and therefore the `CoupledLeg`s and `CoupledPair`): `forcedTransfer`, `recoveryAddress` (lost-key reissue to a new wallet), `setAddressFrozen` / `freezePartialTokens` / `unfreezePartialTokens`, and `pause` / `unpause`. Pause + freeze are enforced on the USER `transfer`/`transferFrom` paths; the agent powers operate beneath them via two transient flags (`_agentBypass` skips ONLY sender-eligibility; `_recovering` additionally relocates the Model-A segregated principal and skips the bright line). `CoupledPair.addLegAgent`/`removeLegAgent` grant/revoke the role on both pair-owned legs. Recovery relocates a holder's FULL balance + segregated principal + freeze state to a verified new wallet (closing the 4.4 "single-leg recovery / stranded-principal" deferral) while preserving the coupling supply invariant; a plain forced transfer keeps the bright line (principal cannot leave). `DeployRoseSuite.s.sol` deploys the suite in the 4.1–4.5-validated order, seeding topics from the GENERATED `GeneratedComplianceConfig` (not hand-written), with refuse-if-absent on all network secrets.
+
+## Files
+
+- `prod/contracts/src/token/RoseToken.sol` (modified) — inherits `AgentRole` + OZ `Pausable`; forced transfer, recovery, address + partial freeze, pause; `_update` agent-bypass on sender-eligibility + burn frozen-clamp; user-path pause/freeze guards (`_requireMovable`).
+- `prod/contracts/src/token/CoupledLeg.sol` (modified) — recovery relocates segregated principal (`PrincipalRecovered`); plain forced transfer keeps the Model-A bright line.
+- `prod/contracts/src/token/CoupledPair.sol` (modified) — `addLegAgent`/`removeLegAgent` owner forwarders (grant the transfer-agent on both legs).
+- `prod/contracts/src/token/interface/IRoseToken.sol`, `interface/ICoupledPair.sol` (modified) — agent-power + leg-agent surfaces (events, views, functions).
+- `prod/contracts/script/DeployRoseSuite.s.sol` (new) — ordered deploy; pure `deploy(...)` (locally proven) + `run()` refuse-if-absent broadcast entrypoint.
+- `prod/contracts/test/token/AgentPowers.t.sol` (new, 35 tests) — every power's gating (agent + non-agent + fuzz), forced transfer (revoked/frozen-source bypass, recipient enforced, principal protected, auto-thaw), freeze (address + partial + burn clamp), pause (blocks normal, not agent/owner), recovery (full balance + principal + freeze carry + RecoverySuccess + coupling intact + verified target), standalone `RoseToken` path.
+- `prod/contracts/test/script/DeployRoseSuite.t.sol` (new, 7 tests) — local deploy proof (seeded topics == generated, trusted issuer, agents granted, ownership handed over, end-to-end eligibility + paired mint) + refuse-if-absent on `run()`.
+- `_bmad-output/implementation-artifacts/{sprint-status.yaml,deferred-work.md}`, this report (updated).
+
+## Gates
+
+Vitest **302/302** (unchanged — no TS touched). forge **171/171** (baseline 129 → +42: AgentPowers 35, DeployRoseSuite 7). typecheck / lint / check:regime / check:migrations / format:check all green, `forge fmt --check` clean. The deploy is proven on the in-process EVM; no Sepolia broadcast.
+
+## Notable review decisions
+
+- **3 parallel adversarial layers.** Acceptance Auditor: **PASS on AC-1/AC-2/AC-3/AC-4**. Blind Hunter: verified the `_frozenTokens[a] <= balanceOf(a)` invariant holds in every path (no `_requireMovable` underflow), the transient flags mirror the proven `_pairing` pattern, and pause/freeze sit on the user path while forced/recovery bypass via `_transfer`. Edge-Case Hunter: confirmed Model-A + coupling preservation and flagged dead config.
+- **Patched (2 → forge 171):** (1) added a test proving forced transfer bypasses an address freeze on the source holder (AC-3 coverage gap); (2) removed the unused `DeployConfig.country` env read (`deploy()` never used it; holder registration is Epic 5).
+- **Dismissed (2):** recovery carrying the freeze flag to the new wallet (deliberate continuity — a frozen/sanctioned holder must not escape via recovery; targets a fresh wallet); idempotent `AddressFrozen` on no-op (harmless, mirrors ERC-3643).
+- **Deferred (ops, not code):** the REAL Sepolia broadcast (secrets out-of-band; `run()` refuses until then); single-key `Ownable` + claim-issuer deployer-management-key cleanup (multisig / `Ownable2Step` / key rotation); unbounded-claims OOG (untouched — 4.6 adds no new `isVerified` loop). Recorded in `deferred-work.md`.
+
+## Interface points for Epic 5 (ledger↔chain integration)
+
+- **Deployed addresses** (ClaimTopicsRegistry, TrustedIssuersRegistry, IdentityRegistry, ClaimIssuer, CoupledPair, L/S tokens) are returned by `DeployRoseSuite.deploy(...)` and logged by `run()` — these are the addresses Epic 5's `chain` package (Story 5.1 viem clients/event watchers) will be configured with once the Sepolia broadcast happens.
+- **Role model post-deploy:** `finalOwner` owns every contract and is the only caller of `mintPair`/`burnPair` (the Epic-5 mint/burn commit point); the `identityAgent` registers holders on the IdentityRegistry (Story 5.x onboarding); the `transferAgent` holds the agent powers on both legs (forced transfer / recovery / freeze / pause).
+- **Recovery & forced transfer** are now available for Epic 5/6 reconciliation + lifecycle operations (e.g., relocating a holder's coupled position to a new wallet) without breaking the coupling supply invariant or the Model-A principal segregation.
+- **Mint/burn during pause:** owner `mintPair`/`burnPair` and agent forced ops keep working while the token is paused — so an Epic-5 reconciliation/incident pause does not block the issuer's authoritative supply operations.
