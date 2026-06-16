@@ -71,7 +71,7 @@ The Engine is a **regulated real-time financial-infrastructure product**, sequen
 
 These are **product/legal decisions** the PRD parks; the architecture is built to *accommodate* them without committing:
 
-- **D1 — Rose Note composition & reset loss-allocation (§8 Q1):** bundled (market-neutral holder) vs separate L/S (zero-sum, directional). The coupled-pair schema and contract are designed to support **either** interpretation; P0 model validation (§4.7) proves the *invariant*, not the *loss-allocation*. **Blocks final instrument design, not P0 spine.**
+- **D1 — Rose Note composition & reset loss-allocation (§8 Q1): RESOLVED 2026-06-16 — separate L/S (zero-sum, directional); the losing-leg holder bears the locked loss, the winning-leg holder is the counterparty (funded from pool K).** The Epic-2 coupled-pair schema/contract was built to support either interpretation and stays valid for the delta-neutral *issuance* state; the separate-L/S consequences (one-directional-leg note shape, loss-allocation accounting) land with the reset machinery. P0 model validation (§4.7) proves the *invariant*, not the *loss-allocation*. **D1a RESOLVED 2026-06-16: crystallised & withdrawable** — each reset realizes the winner's gain (withdrawable) and settles the loser's loss, then both legs re-base to a fresh symmetric split of the residual pool (new neutral cycle, no carried P&L), as a balanced settlement journal entry + cash movement. Final instrument design is **unblocked**; remaining work is implementation (note shape → Epics 4–6, reset settlement → Epics 5–7).
 - **Two offshore jurisdictions (§8 Q3)** and **claim-issuer / transfer-agent operating model (§8 Q4)** — recorded as config/role placeholders; `jurisdiction` is a free-text entity field, roles are address-parameterized.
 - **Reconciliation cadence & chain finality/reorg handling (§8 Q6)** — architecture below proposes a default; see Core Decisions.
 
@@ -392,7 +392,7 @@ Subscription (UJ-1/UJ-5): Subscriber (allowlisted, valid ONCHAINID claim) → `a
 
 **Important gaps (tracked, non-blocking — owned by PM/legal/board, not architecture):**
 
-- **D1** Rose Note composition & reset loss-allocation (§8 Q1) — schema/contract support both interpretations; blocks *final instrument design*, not P0 validation.
+- **D1** Rose Note composition & reset loss-allocation (§8 Q1) — **RESOLVED 2026-06-16: separate L/S, directional; losing-leg holder bears the locked loss.** **D1a RESOLVED: crystallised & withdrawable** (realize/settle at reset, re-base symmetric). Final instrument design unblocked; remaining = implementation (Epics 4–7).
 - **Floor-parameter method** for `m`/`g` (§8 Q7, SM-C1) — must be chosen by a stated, defensible method *before* observing reset rate, else the metric is unfalsifiable. (Parked param; config-driven, refuse-if-absent.)
 - **Jurisdictions (§8 Q3)** and **claim-issuer/transfer-agent operating model (§8 Q4)** — parameterized placeholders; legal/business inputs.
 

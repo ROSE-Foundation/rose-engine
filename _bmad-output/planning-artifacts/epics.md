@@ -129,7 +129,7 @@ This document provides the complete epic and story breakdown for rose-engine, de
 
 **Deferred (product/legal/board — accommodate, do not resolve in P0):**
 
-- **D1** Rose Note composition & reset loss-allocation (§8 Q1) — schema/contract support both interpretations; blocks final instrument design, not P0 spine.
+- **D1** Rose Note composition & reset loss-allocation (§8 Q1) — **RESOLVED 2026-06-16: separate L/S, zero-sum directional; losing-leg holder bears the locked loss.** **D1a RESOLVED: crystallised & withdrawable** — each reset realizes/settles the locked P&L (winner withdrawable, loser settled) and both legs re-base symmetric. Forward *implementation*: directional one-leg note shape → Epics 4–6; reset settlement (cash + journal) → Epics 5–7.
 - Two offshore jurisdictions (§8 Q3); claim-issuer / transfer-agent operating model (§8 Q4) — config/role placeholders.
 - Floor-parameter method for `m`/`g` (§8 Q7, SM-C1) — chosen by a stated, defensible method before observing reset rate; config-driven, refuse-if-absent.
 
@@ -404,9 +404,9 @@ So that the instrument is market-neutral on the underlying at issuance and direc
 **When** it is created
 **Then** it references exactly one coupled pair, and that pair's two legs are at equal notional (delta-neutral / market-neutral on the underlying) at issuance
 
-**Given** the unresolved D1 product decision (bundled vs separate L/S, reset loss-allocation)
+**Given** the D1 product decision (was parked when Story 2.4 was built; **RESOLVED 2026-06-16: separate L/S, zero-sum directional, losing-leg holder bears the locked loss**)
 **When** the Note↔pair model is implemented
-**Then** the schema accommodates either interpretation without committing to one (it does not encode post-reset loss-allocation, which is parked)
+**Then** the schema accommodated either interpretation without committing to one (Story 2.4 did not encode post-reset loss-allocation) — and the post-D1 changes are tracked forward, not retro-fitted into the delta-neutral issuance contract: the **one-directional-leg note shape** lands with the L/S token & position model (**Epics 4–6**, where holders first exist), and the **loss-allocation accounting** with the **reset machinery (Epics 5–7)** — now fully specified by **D1a (crystallised & withdrawable)**: each reset realizes the winner's gain, settles the loser's loss, and re-bases both legs symmetric, as a balanced settlement journal entry + cash movement
 
 ---
 

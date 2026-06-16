@@ -7,3 +7,4 @@ export * from './repositories/accounts.js';
 export * from './repositories/coupled-pairs.js';
 export * from './repositories/journal-entries.js';
 export * from './repositories/issuance.js';
+export * from './repositories/rose-notes.js';

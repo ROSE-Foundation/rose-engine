@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type pg from 'pg';
 import { createDb, createPool, type RoseDb } from './db.js';
 import { hardReset, migrateDown, migrateUp } from './migrate.js';
+import { MIGRATIONS } from './migrations/index.js';
 import { migration0004 } from './migrations/0004-coupled-pair-lifecycle.js';
 import type { CoupledPairState } from './schema/index.js';
 import {
@@ -231,8 +232,10 @@ describe('app guard and DB trigger encode the SAME transition set', () => {
 
 describe('migration 0004 reversibility (NFR-5)', () => {
   it('forward → down → forward re-creates the lifecycle trigger and function', async () => {
-    // Roll back only 0004; the trigger/function must be gone, so an illegal raw UPDATE now succeeds.
-    await migrateDown(pool, 1);
+    // Roll back to before 0004 — derive the step count from MIGRATIONS so appending later
+    // migrations never needs this number bumped; the trigger/function must then be gone.
+    const stepsToBefore0004 = MIGRATIONS.filter((m) => m.version >= migration0004.version).length;
+    await migrateDown(pool, stepsToBefore0004);
     const fnGone = await pool.query<{ n: number }>(
       `SELECT count(*)::int AS n FROM pg_proc WHERE proname = 'enforce_coupled_pair_transition'`,
     );

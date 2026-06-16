@@ -2,6 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type pg from 'pg';
 import { createDb, createPool, type RoseDb } from './db.js';
 import { hardReset, migrateDown, migrateUp } from './migrate.js';
+import { MIGRATIONS } from './migrations/index.js';
 import { migration0003 } from './migrations/0003-coupled-pairs.js';
 import {
   InvalidCoupledPairError,
@@ -263,11 +264,10 @@ describe('journal_entries.coupled_pair_id FK (migration 0003)', () => {
 
 describe('migration 0003 reversibility (NFR-5)', () => {
   it('forward → down → forward leaves coupled_pairs present again', async () => {
-    // Roll back to before 0003 (2 steps: 0004 lifecycle trigger, then 0003), assert the table is
-    // gone, then re-apply and assert it is back. Story 2.2 appended migration 0004 on top of 0003,
-    // so removing the coupled_pairs table now requires rolling back both — a test-only consequence
-    // of the new append-only migration (no DONE migration edited).
-    await migrateDown(pool, 2);
+    // Roll back to before 0003 — derive the step count from MIGRATIONS so appending later
+    // migrations (as stories 2.2/2.4 did with 0004/0005) never needs this number bumped.
+    const stepsToBefore0003 = MIGRATIONS.filter((m) => m.version >= migration0003.version).length;
+    await migrateDown(pool, stepsToBefore0003);
     const goneCheck = await pool.query<{ present: boolean }>(
       `SELECT to_regclass('public.coupled_pairs') IS NOT NULL AS present`,
     );

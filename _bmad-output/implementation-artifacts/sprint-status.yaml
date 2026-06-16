@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-15
-last_updated: 2026-06-16T14:30
+last_updated: 2026-06-16T12:30
 project: rose-engine
 project_key: NOKEY
 tracking_system: file-system
@@ -53,19 +53,19 @@ development_status:
   epic-1-retrospective: optional
 
   # Epic 2: Coupled-Pair Contract & Lifecycle
-  epic-2: in-progress
+  epic-2: done
   2-1-freeze-and-persist-the-coupled-pair-shared-data-model: done
   2-2-represent-and-enforce-the-pair-lifecycle-state-machine: done
   2-3-record-a-coupled-pair-issuance-as-one-balanced-journal-entry: done
-  2-4-embed-a-coupled-pair-in-a-rose-note-delta-neutral-at-issuance: backlog
+  2-4-embed-a-coupled-pair-in-a-rose-note-delta-neutral-at-issuance: done
   epic-2-retrospective: optional
 
   # Epic 3: Capital-Flow Authorization — Single Chokepoint & Single-Source Rules
-  epic-3: backlog
-  3-1-define-the-single-source-rule-specification-and-conformance-vectors: backlog
-  3-2-provide-the-default-deny-authorization-provider-interface-substitutable: backlog
-  3-3-route-all-off-chain-capital-movement-through-the-posttransfer-chokepoint: backlog
-  3-4-enforce-the-minimal-p0-rule-set-via-the-generated-off-chain-policy-provider: backlog
+  epic-3: done
+  3-1-define-the-single-source-rule-specification-and-conformance-vectors: done
+  3-2-provide-the-default-deny-authorization-provider-interface-substitutable: done
+  3-3-route-all-off-chain-capital-movement-through-the-posttransfer-chokepoint: done
+  3-4-enforce-the-minimal-p0-rule-set-via-the-generated-off-chain-policy-provider: done
   epic-3-retrospective: optional
 
   # Epic 4: On-Chain Permissioned Tokens & Compliance (ERC-3643 on Sepolia)

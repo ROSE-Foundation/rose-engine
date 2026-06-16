@@ -8,7 +8,11 @@
 // (`long_leg_value` = V_A, `short_leg_value` = V_B). There is deliberately no separate legs
 // table, so a leg has nowhere to exist on its own and an orphan/single leg is structurally
 // impossible. The schema does NOT encode the V_A + V_B = K conservation invariant nor any
-// post-reset loss-allocation (D1 parked) — that stays free for either Rose-Note interpretation.
+// post-reset loss-allocation. D1/D1a are resolved (2026-06-16: separate L/S directional, the
+// losing-leg holder bears the locked loss; at each reset the P&L is crystallised & withdrawable —
+// winner realized, loser settled, both legs re-based symmetric). That only happens at a RESET,
+// owned by the reset machinery (Epics 5–7); this issuance contract stays delta-neutral and
+// loss-allocation-free by design.
 import { check, numeric, pgEnum, pgTable, text, timestamp, uuid } from 'drizzle-orm/pg-core';
 import { sql } from 'drizzle-orm';
 

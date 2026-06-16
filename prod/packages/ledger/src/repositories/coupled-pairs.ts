@@ -10,7 +10,7 @@
 // conservation invariant (Epic 7 / D1 parked).
 import { eq, sql } from 'drizzle-orm';
 import { assertNotFloat } from '@rose/shared';
-import type { RoseDb, RoseExecutor } from '../db.js';
+import type { RoseExecutor } from '../db.js';
 import { coupledPairs } from '../schema/index.js';
 import type { CoupledPair, CoupledPairState } from '../schema/index.js';
 
@@ -180,8 +180,15 @@ export async function createCoupledPair(
   return toView(row);
 }
 
-/** Reads a coupled pair by id. `leverage` is returned per-pair from the row, never a constant. */
-export async function getCoupledPair(db: RoseDb, id: string): Promise<CoupledPairView | null> {
+/**
+ * Reads a coupled pair by id. `leverage` is returned per-pair from the row, never a constant.
+ * Accepts a `RoseExecutor` so a caller inside an outer transaction (e.g. `createRoseNote`, Story
+ * 2.4) reads the pair on the SAME transaction; a plain `RoseDb` still satisfies it.
+ */
+export async function getCoupledPair(
+  db: RoseExecutor,
+  id: string,
+): Promise<CoupledPairView | null> {
   const row = await db.query.coupledPairs.findFirst({ where: eq(coupledPairs.id, id) });
   return row ? toView(row) : null;
 }

@@ -143,3 +143,28 @@ Final gate (all green, docker Postgres 18 on :5544): `pnpm typecheck` → 0; `pn
 ### Action Items
 - [x] [Review][Patch][Med] Reject over-precision `anchorPrice` instead of silently rounding (explicit precision-loss error + regression test). [repositories/coupled-pairs.ts, coupled-pairs.test.ts]
 - [x] [Review][Test][Low] Add a DB-CHECK-backstop regression test (fractional smallest-unit rejected via raw SQL, repo bypassed). [coupled-pairs.test.ts]
+
+## Code Review Findings (read-only re-review)
+
+**Reviewer:** Fabrice (AI-assisted, validation re-review — Postgres 18 on :5544)
+**Date:** 2026-06-16
+**Scope:** Read-only validation of the 2.1 File List; no production code modified.
+**Outcome:** Story 2.1 production artifacts are SOUND — both ACs covered, schema/migration/repository correct. One Medium maintainability finding in a 2.1-owned test, currently RED due to Story 2.4 in-progress work.
+
+### Verdict by gate (current tree state)
+- `pnpm lint` → GREEN (0).
+- `pnpm check:regime` → GREEN (`/prod` has no imports from `/throwaway`).
+- `pnpm check:migrations` → GREEN ("Reversibility OK: up→down→up over 5 migration(s)") — confirms 0003's `up`/`down` is correct at the runner level.
+- `pnpm typecheck` → RED, but ONLY in `repositories/rose-notes.ts` (Story 2.4, in-progress, untracked). No 2.1 file is implicated.
+- `pnpm format:check` → RED, but ONLY `rose-notes.ts` / `rose-notes.test.ts` (Story 2.4). No 2.1 file is implicated.
+- `pnpm test` → 3 failing of 138. Two failures are in 2.1/2.2 reversibility tests (root cause below); one is a 2.4 `rose-notes.test.ts` isolation bug (unique-constraint, not 2.1).
+
+### Acceptance criteria (independently re-confirmed)
+- AC-1 (frozen fields + frozen types): SATISFIED. `information_schema` introspection test asserts `anchor_price numeric(18,8)`, unconstrained `NUMERIC` for `leverage`/`collateral_pool`/`floor`/legs (not bigint), `reference_asset text`, `state` = `coupled_pair_state` enum (six glossary codes in order, default `PENDING`), `timestamptz` timestamps.
+- AC-2 (single-leg unrepresentable; per-pair leverage): SATISFIED. No separate legs table; both legs NOT NULL on the single row; raw insert omitting a leg fails NOT NULL; repo requires both legs (lone-leg create neither type-checks nor runs); two pairs round-trip distinct per-row L (1 vs 3.5).
+
+### Findings
+- [ ] [Review][Patch][Med] Fragile reversibility test — hardcoded rollback depth. `coupled-pairs.test.ts` "forward → down → forward" calls `migrateDown(pool, 2)` assuming exactly two migrations sit above `0003`. Story 2.4 appended `0005-rose-notes`, so 2 steps now only rolls back `0005`+`0004` and leaves `coupled_pairs` (`0003`) present → the test fails (`expected true to be false`). The depth was already bumped 1→2 when 2.2 added `0004`; the pattern keeps breaking. Recommend rolling back to a target version (or computing depth from the migration list) instead of a literal count. [prod/packages/ledger/src/coupled-pairs.test.ts:270] (NOTE: not applied — read-only review.)
+- [x] [Review][Defer] Project-wide `typecheck` + `format:check` RED from Story 2.4 in-progress files (`rose-notes.ts`, `rose-notes.test.ts`). Not a 2.1 artifact; deferred to Story 2.4. [prod/packages/ledger/src/repositories/rose-notes.ts]
+- [x] [Review][Defer] `rose-notes.test.ts` unique-constraint isolation failure. Story 2.4 test bug; out of 2.1 scope. [prod/packages/ledger/src/rose-notes.test.ts]
+- [x] [Review][Confirmed-good] Runner-level migration reversibility green over all 5 migrations — 0003 `down` (drop FK → table → enum) is the exact inverse and re-applies cleanly.
