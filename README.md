@@ -112,6 +112,9 @@ pnpm check:migrations      # verifies the ledger schema migrates and reverses cl
 
 ## Shared live environment (PaaS)
 
+> **Participants:** see **[DEMO.md](DEMO.md)** for what the demo contains, how to test, and exactly
+> what is real vs simulated (mocked).
+
 For letting participants exercise the screens, the app deploys as **one web service**: the Fastify
 API (`@rose/api`) serves the `@rose/web` static build on the **same origin** (no CORS), all behind
 **one shared basic-auth gate**. The entrypoint is `prod/packages/api/src/serve.ts`.
