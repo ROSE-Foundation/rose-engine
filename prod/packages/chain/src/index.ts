@@ -37,6 +37,18 @@ export {
 
 export { roseTokenAbi, coupledPairAbi } from './abis/index.js';
 
+// Paper-mode chain adapter (infrastructure): an in-process, network-free, secret-free write seam +
+// synthetic-confirmation transport, promoted from the proven 5.3/5.4/6.x test fakes for the shared
+// live environment. Composed by `@rose/rose-note` paper mode; never used on a real network.
+export {
+  PAPER_MODE_BANNER,
+  PAPER_PAIR_ADDRESS,
+  makePaperChainConfig,
+  createPaperTransport,
+  makePaperAccount,
+  createPaperChainClients,
+} from './paper/paper-chain.js';
+
 export {
   OutboxSaga,
   ledgerOutboxStore,

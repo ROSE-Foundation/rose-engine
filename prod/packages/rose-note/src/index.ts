@@ -73,3 +73,13 @@ export {
   type StrategyTick,
   type StrategyTickOutcome,
 } from './strategy.js';
+
+// Paper-mode composition (infrastructure): ready-to-inject write services with IN-PROCESS
+// auto-confirmation, for the shared live environment (no Sepolia, no secret). See `paper/paper-mode.ts`.
+export {
+  makePaperModeServices,
+  PAPER_MODE_BANNER,
+  type PaperModeConfig,
+  type PaperModeServices,
+  type PaperFloorParams,
+} from './paper/paper-mode.js';

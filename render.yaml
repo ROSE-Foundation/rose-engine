@@ -23,6 +23,12 @@ services:
         value: 8080
       - key: WEB_DIST_DIR
         value: /app/prod/packages/web/dist
+      # PAPER MODE (non-secret): composes the subscribe / redeem / strategy write services as an
+      # in-process SIMULATION (no Sepolia, no RPC, no secret) so participants can complete those flows
+      # end-to-end. On-chain effects are simulated, not real. Remove this key to keep the write routes
+      # at the typed 503 (real on-chain wiring requires out-of-band Sepolia secrets — deferred).
+      - key: ENGINE_MODE
+        value: paper
       - key: DATABASE_URL
         fromDatabase:
           name: rose-engine-db

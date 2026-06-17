@@ -123,12 +123,52 @@ protects **every** route — the API, `/openapi.json`, the static front-end, and
 Credentials are compared in constant time and are read **only** from the environment (no secret is
 committed or baked into the image).
 
-> Demo scope: the chain-dependent **write** services (subscribe / redeem / strategy) need
-> out-of-band chain secrets, so they are **not** wired in this environment. Those write routes
-> return the existing typed `503` (refuse-if-absent); the read surfaces and the whole UI render
-> fully. The migrations run automatically on boot.
+**Paper mode — `ENGINE_MODE=paper` (fully interactive, simulated).** Set `ENGINE_MODE=paper` and the
+chain-dependent **write** services (subscribe / redeem / strategy) are composed as an **in-process
+simulation**: every screen becomes fully interactive and a subscription / redemption / strategy reset
+completes end-to-end (`pending → confirmed`, with a balanced ledger entry) — but the **on-chain effects
+are SIMULATED, not real**. There is **no Sepolia, no RPC, and no secret**: a network-free transport
+stands in for the chain and the on-chain confirmation event is synthesized in-process (the exact seam
+the `@rose/chain` 5.3/5.4 and `@rose/rose-note` 6.2/6.3/6.4 test suites already prove). The server logs
+a clear `PAPER MODE: on-chain effects are simulated, not real …` banner at boot. On boot it also seeds a
+demo coupled pair / Rose Note, the typed accounts, and a starting position; the **allowlist-eligible**
+subscriber address for the demo is `0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (any other address is
+refused with `403`, the FR-19 eligibility analogue). The demo blueprint (`render.yaml`) sets
+`ENGINE_MODE=paper` by default — it is a **non-secret** value, safe to commit.
 
-### Deploy on Render (blueprint)
+> Without `ENGINE_MODE=paper` (and with no real chain config), the write routes return the existing
+> typed `503` (refuse-if-absent) — paper mode is **never** enabled silently. The read surfaces and the
+> whole UI render fully regardless. The migrations run automatically on boot.
+
+> For **real** on-chain writes (a true Sepolia broadcast + live `PairMinted`/`PairBurned` confirmation)
+> the deployment needs the out-of-band Sepolia secrets (`SEPOLIA_RPC_URL` + the deployed contract
+> addresses + an out-of-band signer); that path remains **deferred** and is not wired here.
+
+### Deploy on Railway (primary)
+
+Railway builds the single-service image straight from the repo `Dockerfile` (config in
+`railway.toml`). No secret is committed — credentials are Railway service variables.
+
+1. Push this repo, then in Railway: **New Project → Deploy from GitHub repo**, select it (the
+   `Dockerfile` + `railway.toml` are detected automatically).
+2. Add a **Postgres** plugin to the project (**New → Database → Add PostgreSQL**). It exposes a
+   `DATABASE_URL` variable on the database service.
+3. On the **app service → Variables**, set:
+   - `DATABASE_URL` → reference the plugin's value: `${{Postgres.DATABASE_URL}}`
+   - `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` → your shared login/password (secrets)
+   - `ENGINE_MODE` → `paper` (fully-interactive simulated write flows; non-secret)
+   - `PORT` is injected by Railway and already honored by `serve.ts`.
+4. Deploy. On boot the server applies migrations and listens on `$PORT`. (No healthcheck path is
+   configured because the basic-auth gate also covers `/health`; Railway's port check is used.)
+5. Seed the demo data once so the screens aren't empty — from the service shell (or `railway run`):
+
+   ```bash
+   node /app/prod/packages/api/dist/seed-demo.js
+   ```
+
+6. Open the Railway-provided URL and authenticate with the credentials above.
+
+### Deploy on Render (blueprint, alternative)
 
 1. Push this repo (the blueprint is `render.yaml`: one Docker web service + one managed Postgres).
 2. In Render: **New → Blueprint**, select the repo. Render provisions the Postgres database and
@@ -142,8 +182,9 @@ committed or baked into the image).
    node /app/prod/packages/api/dist/seed-demo.js
    ```
 
-> **Railway / Fly.io** work the same way with the **same `Dockerfile`**: provision a managed
-> Postgres, then set `DATABASE_URL`, `PORT`, `BASIC_AUTH_USER`, and `BASIC_AUTH_PASSWORD`.
+> **Fly.io** works the same way with the **same `Dockerfile`**: provision a managed Postgres, then
+> set `DATABASE_URL`, `BASIC_AUTH_USER`, `BASIC_AUTH_PASSWORD`, and `ENGINE_MODE=paper` (`PORT` is
+> provided by the platform).
 
 ### Test the same image locally
 
@@ -154,9 +195,12 @@ credential and the container exits immediately with a clear refusal):
 docker build -t rose-engine .
 
 # Point at a reachable Postgres. For the local docker-compose DB, use host.docker.internal:5544.
+# Add `-e ENGINE_MODE=paper` for the fully-interactive SIMULATED write flows (no Sepolia, no secret);
+# omit it to keep the write routes at the typed 503.
 docker run --rm -p 8080:8080 \
   -e BASIC_AUTH_USER=demo \
   -e BASIC_AUTH_PASSWORD=change-me \
+  -e ENGINE_MODE=paper \
   -e DATABASE_URL=postgres://rose:rose@host.docker.internal:5544/rose_engine \
   rose-engine
 

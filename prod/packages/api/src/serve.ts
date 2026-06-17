@@ -11,18 +11,22 @@
 //    is no `import ... from '@rose/web'` (that would be a source dependency, not what this is).
 //  - NO secret is hard-coded; credentials and DATABASE_URL come from the environment only.
 //
-// The chain-dependent WRITE services (subscriptions/redemptions/strategy) require out-of-band chain
-// secrets (SEPOLIA_RPC_URL, keys) that a screens demo does not carry, so they are intentionally NOT
-// composed here. The corresponding write routes then return the existing typed 503 (refuse-if-absent)
-// — acceptable for a screens walkthrough; the READ surfaces (group-view/coupled-pairs/rose-notes)
-// and the whole UI render fully.
+// The chain-dependent WRITE services (subscriptions/redemptions/strategy) are composed ONLY when
+// PAPER MODE is EXPLICITLY requested via `ENGINE_MODE=paper` — an in-process, network-free, secret-free
+// simulation (the `@rose/rose-note` paper composition over the `@rose/chain` paper transport) that
+// auto-confirms each write so participants can complete the flows end-to-end. Paper mode is NEVER
+// enabled implicitly, and its on-chain effects are SIMULATED, not real (logged at boot). Without it the
+// write routes return the existing typed 503 (refuse-if-absent); the real on-chain write path needs
+// out-of-band Sepolia secrets and stays deferred. The READ surfaces always render fully.
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import fastifyBasicAuth from '@fastify/basic-auth';
 import fastifyStatic from '@fastify/static';
 import { createDb, createPool, migrateUp, type RoseDb } from '@rose/ledger';
+import { makePaperModeServices, PAPER_MODE_BANNER } from '@rose/rose-note';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildApp, type ApiDeps } from './app.js';
+import { seedPaperDemo } from './seed-demo.js';
 
 /** Validated shared basic-auth credentials. */
 export interface BasicAuthCredentials {
@@ -72,6 +76,17 @@ export function loadBasicAuthCredentials(
     throw new ServerConfigRefusalError(missing);
   }
   return { user, password };
+}
+
+/**
+ * Whether PAPER MODE is EXPLICITLY requested via `ENGINE_MODE=paper`. Paper mode is NEVER enabled
+ * implicitly — it must be asked for by the environment (the on-chain effects it produces are SIMULATED,
+ * not real). Any other value (incl. unset) leaves the write services uncomposed (the typed 503).
+ */
+export function isPaperModeRequested(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return (env.ENGINE_MODE ?? '').trim().toLowerCase() === 'paper';
 }
 
 /** Reads `DATABASE_URL`, refusing if absent — a deployed environment never uses a local default. */
@@ -194,9 +209,33 @@ async function main(): Promise<void> {
   console.log(`[serve] migrations up to date (${applied.length} newly applied).`);
 
   const db: RoseDb = createDb(pool);
-  // Read surfaces are fully composed. Chain-dependent write ports are intentionally omitted (no
-  // chain secrets in a screens demo) — their routes return the existing typed 503.
-  const deps: ApiDeps = { db, logger: true };
+  // Read surfaces are always composed. The chain-dependent WRITE ports are composed ONLY when paper
+  // mode is EXPLICITLY requested (ENGINE_MODE=paper) — never implicitly. Otherwise they stay absent
+  // and their routes return the existing typed 503 (refuse-if-absent); the real on-chain write path
+  // requires out-of-band Sepolia secrets and is intentionally deferred (not wired here).
+  let deps: ApiDeps = { db, logger: true };
+  if (isPaperModeRequested()) {
+    console.warn(`[serve] ${PAPER_MODE_BANNER}`);
+    console.log('[serve] paper mode: seeding demo data + composing simulated write services…');
+    const paperConfig = await seedPaperDemo(db);
+    const paper = makePaperModeServices({ db, ...paperConfig });
+    deps = {
+      db,
+      logger: true,
+      subscriptions: paper.subscriptions,
+      redemptions: paper.redemptions,
+      strategy: paper.strategy,
+    };
+    console.log(
+      '[serve] paper mode ACTIVE — subscribe/redeem/strategy are fully interactive; ' +
+        'on-chain effects are SIMULATED in-process (no Sepolia, no secret).',
+    );
+  } else {
+    console.log(
+      '[serve] write services NOT composed (read-only). Set ENGINE_MODE=paper for a fully ' +
+        'interactive SIMULATED environment; real on-chain writes need out-of-band Sepolia secrets (deferred).',
+    );
+  }
 
   const app = await buildServer({ deps, credentials, webDistDir, logger: true });
 

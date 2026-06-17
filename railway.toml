@@ -1,0 +1,18 @@
+# Railway deployment config (https://docs.railway.com/reference/config-as-code).
+# Builds the single-service image from the repo Dockerfile (Fastify API serving the @rose/web
+# build on the same origin, behind the shared basic-auth gate). No secret lives in this file:
+# DATABASE_URL, BASIC_AUTH_USER, BASIC_AUTH_PASSWORD are set as Railway service variables, and
+# DATABASE_URL is referenced from the Railway Postgres plugin. ENGINE_MODE=paper is a non-secret
+# default that makes the write flows fully interactive (simulated, no Sepolia).
+#
+# No healthcheckPath is set on purpose: the basic-auth gate protects EVERY route (including
+# /health), so an unauthenticated HTTP healthcheck would get 401. Railway's default port-readiness
+# check is used instead.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
