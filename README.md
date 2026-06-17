@@ -133,7 +133,11 @@ the `@rose/chain` 5.3/5.4 and `@rose/rose-note` 6.2/6.3/6.4 test suites already 
 a clear `PAPER MODE: on-chain effects are simulated, not real …` banner at boot. On boot it also seeds a
 demo coupled pair / Rose Note, the typed accounts, and a starting position; the **allowlist-eligible**
 subscriber address for the demo is `0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa` (any other address is
-refused with `403`, the FR-19 eligibility analogue). The demo blueprint (`render.yaml`) sets
+refused with `403`, the FR-19 eligibility analogue). The front-end carries this participant identity
+via `VITE_SUBSCRIBER_ADDRESS`, **baked at web build time** (real session auth carrying the ONCHAINID
+claim is deferred); the `Dockerfile` defaults that build arg to the eligible address above, so the
+deployed UI can actually subscribe/redeem. Override it with
+`docker build --build-arg VITE_SUBSCRIBER_ADDRESS=0x…`. The demo blueprint (`render.yaml`) sets
 `ENGINE_MODE=paper` by default — it is a **non-secret** value, safe to commit.
 
 > Without `ENGINE_MODE=paper` (and with no real chain config), the write routes return the existing

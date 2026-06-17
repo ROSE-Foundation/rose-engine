@@ -21,7 +21,14 @@ RUN pnpm install --frozen-lockfile
 
 # Build all TypeScript projects (tsc -b), then bundle the front-end. VITE_API_BASE_URL is empty so
 # the SPA calls the API on the SAME origin (relative paths) — there is no separate API host.
+# VITE_SUBSCRIBER_ADDRESS is the on-screen participant identity baked at build time (real session
+# auth carrying the ONCHAINID claim is deferred). It defaults to the paper-demo allowlist-eligible
+# address (must match PAPER_ELIGIBLE_SUBSCRIBER in prod/packages/api/src/seed-demo.ts) so the
+# ENGINE_MODE=paper subscribe/redeem flows are actually eligible (not 403). Not a secret; override
+# at build with `--build-arg VITE_SUBSCRIBER_ADDRESS=0x…`.
 ENV VITE_API_BASE_URL=""
+ARG VITE_SUBSCRIBER_ADDRESS=0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+ENV VITE_SUBSCRIBER_ADDRESS=$VITE_SUBSCRIBER_ADDRESS
 RUN pnpm build
 RUN pnpm --filter @rose/web build
 
