@@ -1,0 +1,18 @@
+# THROWAWAY fixture (FR-16) — BTC/USD ticks (timestamp,price), L=1.
+# BTC is the higher-volatility stress test of the SAME issuer-neutral invariant. A bear-market
+# drawdown from ~60k toward ~16k (a ~73% drop, in line with real BTC peak-to-trough cycles)
+# crosses a plausible floor at L=1, so a threshold-only replay fires at least one reset — while
+# the EUR/USD fixture under the same floor fires none.
+timestamp,price
+2026-01-01T00:00:00Z,60000
+2026-01-08T00:00:00Z,58000
+2026-01-15T00:00:00Z,62000
+2026-01-22T00:00:00Z,55000
+2026-01-29T00:00:00Z,48000
+2026-02-05T00:00:00Z,51000
+2026-02-12T00:00:00Z,40000
+2026-02-19T00:00:00Z,35000
+2026-02-26T00:00:00Z,28000
+2026-03-05T00:00:00Z,16000
+2026-03-12T00:00:00Z,21000
+2026-03-19T00:00:00Z,18000

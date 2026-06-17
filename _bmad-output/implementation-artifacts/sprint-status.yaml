@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-15
-last_updated: 2026-06-16T23:55
+last_updated: 2026-06-17T08:30
 project: rose-engine
 project_key: NOKEY
 tracking_system: file-system
@@ -99,8 +99,8 @@ development_status:
   epic-6-retrospective: optional
 
   # Epic 7: Coupled-Coin Model Validation — The Trial (Throwaway)
-  epic-7: backlog
-  7-1-implement-the-coupled-coin-reference-math-with-the-issuer-neutral-invariant: backlog
-  7-2-simulate-threshold-only-rebalancing-over-historical-ticks: backlog
-  7-3-prove-no-negative-leg-journal-every-reset-and-traverse-the-full-lifecycle: backlog
+  epic-7: done
+  7-1-implement-the-coupled-coin-reference-math-with-the-issuer-neutral-invariant: done
+  7-2-simulate-threshold-only-rebalancing-over-historical-ticks: done
+  7-3-prove-no-negative-leg-journal-every-reset-and-traverse-the-full-lifecycle: done
   epic-7-retrospective: optional

@@ -961,3 +961,82 @@ NEW workspace package **`@rose/web`** (React 18 + Vite + TypeScript + Tailwind v
 **Gates (LOCAL, paper — no Sepolia):** `pnpm test` **656 passed** (633 baseline + 23 new web tests; no Postgres/network for the web tests) · `typecheck`/`lint`/`format:check` green · `check:regime` green · `check:migrations` 7 reversible · `forge test` **171 passed**. **Zero new dependencies.** **No `.env`, no secret, no placeholder** created (the subscriber address is an env var with an empty default).
 
 **Epic 6 complete.** Residual ops/backend follow-ups (all recorded in `deferred-work.md`, none blocking): real Subscriber session auth carrying the ONCHAINID eligibility claim; the deployed API base URL + CORS + live polling/websocket cadence; the on-chain commit point that actually flips `pending → confirmed` on **real Sepolia**; a "list my positions" + a per-execution Exchange/Trading read endpoint.
+
+---
+
+## Story 7-1 — Coupled-coin reference math with the issuer-neutral invariant (DONE — FIRST epic-7 / THROWAWAY story)
+
+**Pipeline:** create-story → dev-story → code-review, fully autonomous. Status `backlog → ready-for-dev → in-progress → review → done`. **`epic-7: in-progress`** (throwaway "The Trial" begun). Branch `feat/epic-3-capital-flow-authorization`; **no git commit made**.
+
+**Regime — THROWAWAY:** all code under `throwaway/coupled-math/`. `/throwaway` may import `/prod` (reuses `@rose/shared` `allocate`); `/prod` must NEVER import `/throwaway` — `pnpm check:regime` stays **green**. `/throwaway` is deliberately NOT a pnpm-workspace member (regime defense), so `@rose/shared` is reached via a relative import into `/prod` source (the tolerated direction). No DB, no auth, no network — pure in-memory model validation.
+
+**Delivered (`throwaway/coupled-math/`):**
+
+- **Exact `Rational` core** (`src/rational.ts`) — BigInt num/den; `parseDecimal` rejects JS `number` (NFR-2). The model proportions (`r`, `L·r`, `f`, buffer) are exact rationals at higher precision than the integer postings.
+- **Reference math** (`src/coupled-math.ts`) — `r=(P−P₀)/P₀`; `V_A=(K/2)(1+L·r)`, `V_B=(K/2)(1−L·r)` via `@rose/shared` `allocate(K,[b+a,b−a])` so `long+short===K` **by construction**. `L` read per-pair (never hard-coded). `withinBarrier` (`|L·r|<1`), `legValues`, `invariantHolds`, `floor` (`f=m·L·g`), `buffer`, `floorBreached`, and `evaluate` (one-shot report: deviation/barrier/legs/invariant/buffer/floor/breach/would-be-negative-leg).
+- **Floor params, fail-closed** (`src/floor-params.ts`) — `loadFloorParams` reads `MODEL_FLOOR_M`/`MODEL_FLOOR_G` and **refuses** (naming offenders) on absence/invalidity; never defaults (NFR-4, §11.2).
+
+**Testable consequences (28 throwaway tests):**
+
+- **Issuer-neutral invariant EXACT (SM-2):** across a within-barrier price grid (`L=1`: P∈[1,199]; `L=2`: P∈[51,149]) and K ∈ {1e6, 999_999 odd, 7 tiny, 1e18 token-magnitude}, `long+short === K` exactly over `bigint` (no binary float in the assertion). Odd-K proves the deterministic residual policy (long absorbs the +1 unit).
+- **No negative leg within the barrier:** `long>=0 && short>=0` across the grid; at boundary `|L·r|=1` the losing leg is exactly 0 (not negative).
+- **Floor breach detected** just inside the floor; **refuse-if-absent** for m/g (m absent / g absent / both).
+- **Gap PAST the floor (key model risk):** a single jump to P=250 (`L·r=1.5`) → `barrierCrossed`, `legWouldBeNegative`, `legs=null`, `invariantHolds=false`, `floorBreached=true` — exactly the condition under which issuer-neutrality breaks; `legValues` throws past the barrier.
+
+**Code-review (3 adversarial lenses):** **1 patch applied** — `loadFloorParams` accepted non-positive `m`/`g` (`"0"`, `"-1"`, `"0.0"`); a zero/negative margin or gap yields a floor that never (or perversely) breaches, masking the very model risk this harness exists to surface — now refused as strictly-positive (+1 test). 0 deferred; 4 dismissed as by-design (recompute micro-cost; lossy report-only formatter; throwaway outside root tsconfig/eslint/format globs by regime design — typechecked via its own `tsconfig --noEmit`; strict-open-interval boundary semantics).
+
+**Gates:** `pnpm test` **684 passed** (656 baseline + 28 throwaway; the throwaway suite now runs in the gate via a root `vitest.config.ts` include — orthogonal to the import-direction regime rule) · `typecheck`/`lint`/`format:check` green · **`check:regime` green (`/prod` ↮ `/throwaway`)** · `check:migrations` 7 reversible · `forge test` **171** unchanged (no Solidity touched). **Zero new dependencies.** No secret/placeholder/`.env` created.
+
+**Interfaces for 7-2 / 7-3:** `legValues`, `evaluate` (the breach/negative-leg report), `withinBarrier`, `floorBreached`, `floor`, `buffer`, `loadFloorParams`, and the exact `Rational` core — the primitives the threshold-only simulator (7-2) and the no-negative-leg / journal-every-reset / full-lifecycle proof over a tick set (7-3) will consume. The post-reset asymmetric state, loss-locking, and re-anchor mechanics are explicitly OUT of 7-1 (they live in 7-2/7-3).
+
+---
+
+## Story 7-2 — Simulate threshold-only rebalancing over historical ticks (DONE — THROWAWAY, FR-16)
+
+**Pipeline:** create-story → dev-story → code-review, fully autonomous. Status `backlog → ready-for-dev → in-progress → review → done`. **`epic-7: in-progress`** (7-3 remains). Branch `feat/epic-3-capital-flow-authorization`; **no git commit made**.
+
+**Regime — THROWAWAY:** all new code under `throwaway/simulator/`. The package reuses its sibling `@throwaway/coupled-math` (the 7-1 reference math, intra-throwaway) and `/prod` `@rose/shared` `splitInTwo` via the tolerated `/throwaway → /prod` relative import; `/prod` must NEVER import `/throwaway` — `pnpm check:regime` stays **green**. `@throwaway/simulator` is deliberately NOT a pnpm-workspace member and not in the `/prod` build graph (regime defense). No DB, auth, or network — pure in-memory replay of CSV fixtures.
+
+**Delivered (`throwaway/simulator/`):**
+
+- **CSV `timestamp,price` ingestion** (`src/ticks.ts`) — `parseTicks`/`loadTicksFromFile`; header / blank / `#`-comment tolerant; prices kept as strictly-positive decimal strings (never JS `number`, NFR-2); malformed rows fail loud (incl. a corrupt FIRST row — see review).
+- **Threshold-only replay engine** (`src/simulator.ts`) — `simulate(ticks, config) → { resets, ticksProcessed, finalAnchorPrice }`. Each tick is evaluated against the **current** anchor via `@throwaway/coupled-math` `evaluate(...)`; a reset fires **iff** `floorBreached`. **The reset decision passes only `tick.price` into `evaluate` — `tick.timestamp` is never read by it** (FR-16: intrinsic time, never a clock). Each `ResetEvent` locks the exact integer legs at the breaching price, re-anchors P₀ to that price, identifies the losing leg (`L·r>0 ⇒ short`, `<0 ⇒ long`), and locks `lockedLoss = neutralLosingLeg(K/2) − lockedLosingLegValue`; the cycle re-bases to a fresh symmetric K/2:K/2 split (D1a). A single gap past the barrier (`legs===null`) is recorded with `gapPastFloor` + losing-leg clamp (issuer-neutrality break — formally proven in 7-3).
+- **Fixtures** — `fixtures/eurusd.csv` (sub-1% moves ⇒ 0 resets at L=1) and `fixtures/btc.csv` (~73% bear-market drawdown crossing the same floor ⇒ 1 reset).
+
+**Testable consequences (19 throwaway tests):**
+
+- **NEVER on a time interval (FR-16):** a flat series spanning 2000→2099 ⇒ **0 resets**; the same price series under 1-second vs 600-year timestamp spreads ⇒ **identical** reset drivers (the engine ignores time). EUR/USD fixture ⇒ **0** resets; BTC fixture ⇒ **1** (higher-vol stress of the same invariant), under the **same** floor.
+- **Reset locks values + re-anchors + locks loss:** worked example P₀=100, K=1000, f=0.05, P=196 → short losing, legs {980, 20} (sum = K), new anchor 196, lockedLoss 480 — all exact `bigint`.
+- **Re-base:** the repeated tick right after a reset does not re-fire; a later move vs the new anchor fires a second reset.
+- **Crossed / not-crossed** example sets; **refuse-if-absent** floor params reused from 7-1.
+
+**Code-review (3 adversarial lenses — Blind Hunter / Edge-Case Hunter / Acceptance Auditor):** Auditor **PASS on AC-1…AC-7**, no Story-7.3 leakage, no new dependency/secret. **2 patches applied** (both Med, each flagged by two layers): (1) `parseTicks` silently dropped a malformed FIRST data row as a "header" — now fails loud on digit-bearing corruption, tolerating only non-numeric header labels (+test); (2) `simulate` fired phantom resets at r=0 when floor f = m·L·g ≥ 1 — now refused up-front (fail-closed), which also makes the r=0 leg-tiebreak genuinely unreachable (+test). **1 doc fix** (`gapPastFloor` is `>1`, not `≥1`). **2 dismissed** (reporting-only `leveragedDeviationApprox` field; extra-column rows rejected loudly — acceptable strictness).
+
+**Gates:** `pnpm test` **703 passed** (684 baseline + 19 throwaway) · `typecheck`/`lint`/`format:check` green · **`check:regime` green (`/prod` ↮ `/throwaway`)** · `check:migrations` 7 reversible · `forge test` **171** unchanged (no Solidity touched). **Zero new dependencies.** No secret/placeholder/`.env` created.
+
+**Interfaces for 7-3 (final story):** `simulate(ticks, config) → SimResult`; the `ResetEvent` shape (`tickIndex`, `timestamp`, `price`, `anchorBefore`, `losingLeg`, `lockedLong/Short`, `lockedLoss`, `newAnchorPrice`, `gapPastFloor`); `parseTicks`/`loadTicksFromFile`; the EUR/USD + BTC fixtures. 7-3 turns these reset events into the **journal-every-reset** audit artifact, the **formal no-negative-leg + gap/issuer-neutrality-break** report, the **full pair lifecycle** traversal (`PENDING → … → CLOSED`), and the stated, defensible **m/g-selection method before observing the reset rate** (SM-C1 falsifiability).
+
+---
+
+## Story 7-3 — finalization note (orchestrator)
+
+The 7-3 subagent terminated mid code-review (it had completed create-story + dev-story
+— all dev work green, tests 703 → 726 — with the Acceptance Auditor PASS on all 7 ACs and
+the lifecycle table mirroring `/prod`, but stopped before triaging the final finding and
+moving the story to `done`). SendMessage was unavailable, so the orchestrator finalized:
+
+- **LOW finding (resolved):** `closestApproachToBarrier` (trial.ts) tracked `max|L·r|` across
+  ALL ticks including past-barrier breaks, inconsistent with "while within barrier". Fixed by
+  guarding the max with `!ev.legWouldBeNegative` so it counts only at-or-within-barrier ticks
+  (incl. the exactly-at-barrier reset tick = 1.0); breaks remain reported separately in
+  `issuerNeutralityBreaks`. Test `trial.test.ts` still green.
+- **Gates re-run, all green:** typecheck, lint, format:check, check:regime (/prod ↮ /throwaway),
+  check:migrations (7 reversible), Vitest **726/726**, forge **171/171**.
+- Status set to `7-3: done`, `epic-7: done`.
+
+**Model verdict (the Trial):** issuer-neutrality `V_A+V_B=K` is confirmed _conditionally_ — it
+holds exactly within the barrier (proven over price grids + tick replays), and the simulator/
+trial explicitly detect and report the break condition (a price gap past the floor where a leg
+would go negative). No leg goes negative while within the barrier. This is exactly the
+conditional issuer-neutrality the PRD names as the key model risk (§15) — confirmed, not refuted,
+within its stated bounds.

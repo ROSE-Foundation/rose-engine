@@ -1,0 +1,22 @@
+{
+  // THROWAWAY typecheck-only project (FR-16). Deliberately NOT part of the root tsconfig
+  // solution (root references /prod packages only) and NOT a pnpm-workspace member — the
+  // regime defense is that /prod never takes a dependency on /throwaway. This project imports
+  // its sibling throwaway library (@throwaway/coupled-math) and /prod source (@rose/shared)
+  // by relative path (allowed direction); `noEmit` relaxes the rootDir constraint so the
+  // cross-package relative imports are permitted for typechecking.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": [
+    "src/**/*.ts",
+    "../coupled-math/src/**/*.ts",
+    "../../prod/packages/shared/src/money.ts"
+  ],
+  "exclude": ["node_modules"]
+}

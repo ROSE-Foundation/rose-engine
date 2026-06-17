@@ -1,0 +1,16 @@
+# THROWAWAY fixture (FR-16) — EUR/USD ticks (timestamp,price), L=1.
+# At L=1 the barrier is ~100% away; EUR/USD's sub-1% moves never approach a plausible floor,
+# so a threshold-only replay fires ZERO resets (the near-zero-reset-rate consequence, SM-C1).
+timestamp,price
+2026-01-02T09:00:00Z,1.0850
+2026-01-02T10:00:00Z,1.0862
+2026-01-02T11:00:00Z,1.0841
+2026-01-02T12:00:00Z,1.0875
+2026-01-02T13:00:00Z,1.0833
+2026-01-02T14:00:00Z,1.0890
+2026-01-02T15:00:00Z,1.0902
+2026-01-02T16:00:00Z,1.0858
+2026-01-03T09:00:00Z,1.0820
+2026-01-03T10:00:00Z,1.0888
+2026-01-03T11:00:00Z,1.0915
+2026-01-03T12:00:00Z,1.0805

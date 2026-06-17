@@ -1,0 +1,11 @@
+{
+  "name": "@throwaway/simulator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "THROWAWAY (FR-16) — threshold-only rebalancing simulator over historical ticks. Replays CSV (timestamp,price) and resets ONLY on a floor breach, NEVER on a clock. Deletable with NO impact on /prod. May import /prod and @throwaway/coupled-math; /prod must NEVER import this.",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

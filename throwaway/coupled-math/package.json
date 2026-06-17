@@ -1,0 +1,11 @@
+{
+  "name": "@throwaway/coupled-math",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "THROWAWAY (FR-15) — coupled-coin reference math + issuer-neutral invariant. Deletable with NO impact on /prod. May import /prod; /prod must NEVER import this.",
+  "main": "./src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  }
+}

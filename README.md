@@ -31,6 +31,8 @@ prod/
     web/           # @rose/web — operator & subscriber surfaces (React + Vite + Tailwind v4 + TanStack Query) on the OpenAPI-typed contract
   contracts/       # Solidity / Foundry — custom ERC-3643-compatible token suite (ONCHAINID identity, atomic paired mint/burn, Model-A bright line, agent powers)
 throwaway/
+  coupled-math/    # @throwaway/coupled-math — exact-BigInt reference math: leg values, issuer-neutral invariant, floor detection
+  simulator/       # @throwaway/simulator — threshold-only rebalancing simulator + the trial (no-negative-leg proof, journal-every-reset, lifecycle traversal)
   mockups/         # historical HTML mockups (surfaces are functional in P0)
 tools/
   check-regime-boundary.mjs   # CI: assert /prod never imports /throwaway
@@ -47,7 +49,12 @@ real Sepolia broadcast is a deferred ops step, no secrets committed):
 - **Epic 4 — On-chain permissioned tokens & compliance** (ERC-3643 on OpenZeppelin: identity, eligibility, atomic paired mint/burn, Model-A, dual-plane conformance, agent powers). ✅ done
 - **Epic 5 — Ledger↔chain integration** (typed clients, outbox/saga dual-write, mint/burn, group view, reconciliation). ✅ done
 - **Epic 6 — Live Rose Note slice & engine surfaces** (typed REST API, live subscription/redemption, paper strategy execution, Covenant Console + coupled-pair + exchange/trading + subscriber surfaces). ✅ done
-- **Epic 7 — Coupled-coin model validation** (throwaway trial: reference math, threshold-only rebalancing simulator). ⏳ next
+- **Epic 7 — Coupled-coin model validation** (throwaway trial: exact reference math, threshold-only rebalancing simulator, no-negative-leg proof + full lifecycle traversal). ✅ done
+
+**All seven epics complete.** The trial confirms the model's issuer-neutral invariant
+`V_A + V_B = K` **conditionally** — it holds exactly within the barrier and the simulator
+explicitly detects/reports the break condition (a price gap past the floor), matching the
+PRD's stated key model risk (§15).
 
 > The real Sepolia broadcast (deploy + live mint/burn/subscription confirmation) is a
 > deferred ops step gated on out-of-band secrets; all on-chain flows are proven locally
