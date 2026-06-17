@@ -9,7 +9,7 @@ import fastifySwagger from '@fastify/swagger';
 import type { RoseDb } from '@rose/ledger';
 import type { ChainSupplySnapshot } from '@rose/reconcile';
 import type { RedemptionService, StrategyExecutor, SubscriptionService } from '@rose/rose-note';
-import Fastify, { type FastifyInstance } from 'fastify';
+import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import {
   hasZodFastifySchemaValidationErrors,
   jsonSchemaTransform,
@@ -64,13 +64,25 @@ export interface ApiDeps {
   readonly logger?: boolean;
 }
 
+/** Optional overrides for the boundary's error-handling install. */
+export interface ErrorHandlingOptions {
+  /**
+   * Override the unmatched-route handler. The default returns a structured `ROUTE_NOT_FOUND` 404.
+   * The shared live-environment server (`serve.ts`) supplies a SPA-fallback handler here so deep
+   * links resolve to the front-end `index.html` instead of a JSON 404 — without changing the
+   * default behavior the in-process API tests rely on.
+   */
+  readonly notFoundHandler?: (request: FastifyRequest, reply: FastifyReply) => void;
+}
+
 /**
  * Install the boundary's structured-error contract on a Fastify instance: Zod request-validation
  * failures ⇒ 400, every other thrown error ⇒ the single `mapErrorToResponse` translator (UX-DR5/
- * NFR-4 — refusals never collapsed), and an unmatched route ⇒ a structured 404. Exported so the
- * exact same handling can be exercised in isolation (tests) and reused by future composition.
+ * NFR-4 — refusals never collapsed), and an unmatched route ⇒ a structured 404 (or a caller-supplied
+ * handler). Exported so the exact same handling can be exercised in isolation (tests) and reused by
+ * future composition.
  */
-export function installErrorHandling(app: FastifyInstance): void {
+export function installErrorHandling(app: FastifyInstance, opts?: ErrorHandlingOptions): void {
   app.setErrorHandler((error, request, reply) => {
     if (hasZodFastifySchemaValidationErrors(error)) {
       reply.status(400).send({
@@ -88,6 +100,11 @@ export function installErrorHandling(app: FastifyInstance): void {
     }
     reply.status(status).send(body);
   });
+
+  if (opts?.notFoundHandler) {
+    app.setNotFoundHandler(opts.notFoundHandler);
+    return;
+  }
 
   app.setNotFoundHandler((request, reply) => {
     reply.status(404).send({
@@ -108,10 +125,26 @@ const DEFAULT_OPENAPI_INFO: OpenApiInfo = Object.freeze({
 });
 
 /**
+ * Optional composition extensions for `buildApp`. Additive and runtime-inert when omitted, so the
+ * in-process API tests (`buildApp({ db })`) are unaffected. The shared live-environment server
+ * (`serve.ts`) uses these to wrap the SAME app in a single basic-auth gate and a static front-end —
+ * rather than duplicating the swagger/error/route wiring.
+ */
+export interface BuildAppExtensions {
+  /**
+   * Invoked AFTER the error-handling contract is installed and BEFORE any route is registered, so a
+   * global `onRequest` auth hook added here protects every subsequent route (API + openapi + static).
+   */
+  readonly beforeRoutes?: (app: FastifyInstance) => Promise<void> | void;
+  /** Override the unmatched-route handler (e.g. a SPA fallback to `index.html`). */
+  readonly notFoundHandler?: ErrorHandlingOptions['notFoundHandler'];
+}
+
+/**
  * Build the typed Fastify app. Async because `@fastify/swagger` registration and route registration
  * are awaited; callers/tests then use `app.inject(...)` (no socket is bound). Remember to `app.close()`.
  */
-export async function buildApp(deps: ApiDeps): Promise<FastifyInstance> {
+export async function buildApp(deps: ApiDeps, ext?: BuildAppExtensions): Promise<FastifyInstance> {
   const app = Fastify({ logger: deps.logger ?? false }).withTypeProvider<ZodTypeProvider>();
 
   // Zod is the validator AND the serializer (request + response validated against the Zod schemas).
@@ -129,7 +162,13 @@ export async function buildApp(deps: ApiDeps): Promise<FastifyInstance> {
   });
 
   // The structured-error contract (UX-DR5/NFR-4 — refusals never collapsed into a generic error).
-  installErrorHandling(app);
+  installErrorHandling(app, { notFoundHandler: ext?.notFoundHandler });
+
+  // Composition hook: register the auth gate + static plugin (serve.ts) before any route, so the
+  // global onRequest auth hook applies to every route registered below.
+  if (ext?.beforeRoutes) {
+    await ext.beforeRoutes(app);
+  }
 
   // Routes — base READ-ONLY surface + system endpoints.
   await app.register(healthRoutes);

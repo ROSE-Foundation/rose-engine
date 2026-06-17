@@ -109,3 +109,61 @@ pnpm check:migrations      # verifies the ledger schema migrates and reverses cl
 
 > The typed config loader is **fail-closed**: it refuses to start when a parked,
 > correctness-critical parameter is absent rather than defaulting it. See `.env.example`.
+
+## Shared live environment (PaaS)
+
+For letting participants exercise the screens, the app deploys as **one web service**: the Fastify
+API (`@rose/api`) serves the `@rose/web` static build on the **same origin** (no CORS), all behind
+**one shared basic-auth gate**. The entrypoint is `prod/packages/api/src/serve.ts`.
+
+**Access control — refuse-if-absent.** The server **refuses to start** unless **both**
+`BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD` are set (a live environment is never exposed without
+protection), and unless `DATABASE_URL` is set (no silent local-default in a deployment). The gate
+protects **every** route — the API, `/openapi.json`, the static front-end, and the SPA fallback.
+Credentials are compared in constant time and are read **only** from the environment (no secret is
+committed or baked into the image).
+
+> Demo scope: the chain-dependent **write** services (subscribe / redeem / strategy) need
+> out-of-band chain secrets, so they are **not** wired in this environment. Those write routes
+> return the existing typed `503` (refuse-if-absent); the read surfaces and the whole UI render
+> fully. The migrations run automatically on boot.
+
+### Deploy on Render (blueprint)
+
+1. Push this repo (the blueprint is `render.yaml`: one Docker web service + one managed Postgres).
+2. In Render: **New → Blueprint**, select the repo. Render provisions the Postgres database and
+   wires `DATABASE_URL` into the web service automatically (via `fromDatabase`).
+3. Set the **two secrets** in the service's **Environment** tab (they are `sync: false`, so they
+   are never read from the committed file): `BASIC_AUTH_USER` and `BASIC_AUTH_PASSWORD`.
+4. Deploy. On boot the server applies migrations, then listens on `$PORT`.
+5. Seed the demo data once (so the screens aren't empty) from the service **Shell**:
+
+   ```bash
+   node /app/prod/packages/api/dist/seed-demo.js
+   ```
+
+> **Railway / Fly.io** work the same way with the **same `Dockerfile`**: provision a managed
+> Postgres, then set `DATABASE_URL`, `PORT`, `BASIC_AUTH_USER`, and `BASIC_AUTH_PASSWORD`.
+
+### Test the same image locally
+
+Build and run the production image exactly as the PaaS does (the gate is mandatory — omit either
+credential and the container exits immediately with a clear refusal):
+
+```bash
+docker build -t rose-engine .
+
+# Point at a reachable Postgres. For the local docker-compose DB, use host.docker.internal:5544.
+docker run --rm -p 8080:8080 \
+  -e BASIC_AUTH_USER=demo \
+  -e BASIC_AUTH_PASSWORD=change-me \
+  -e DATABASE_URL=postgres://rose:rose@host.docker.internal:5544/rose_engine \
+  rose-engine
+
+# In another shell, seed the demo data into the SAME database:
+DATABASE_URL=postgres://rose:rose@localhost:5544/rose_engine \
+  pnpm --filter @rose/api seed:demo
+```
+
+Then open <http://localhost:8080> and authenticate with the credentials above. Local dev without
+Docker: `pnpm --filter @rose/api serve:dev` (after `pnpm build`), with the four env vars set.

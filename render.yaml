@@ -1,0 +1,40 @@
+# Render blueprint for the ROSE Engine shared live environment (infrastructure, NOT a BMAD story).
+# ONE Docker web service (the Fastify API serving the web build on the same origin, behind ONE
+# basic-auth gate) + ONE Render-managed PostgreSQL database.
+#
+# SECURITY: the two basic-auth secrets are `sync: false`, so they are NOT stored in this committed
+# file — you enter them ONCE in the Render dashboard (Environment) per service. DATABASE_URL is
+# wired from the managed database via `fromDatabase` (never hard-coded). The server refuses to start
+# if BASIC_AUTH_USER / BASIC_AUTH_PASSWORD / DATABASE_URL are absent (refuse-if-absent).
+#
+# The same Dockerfile runs on Railway or Fly.io — provision a managed Postgres there and set the
+# same four environment variables (DATABASE_URL, PORT, BASIC_AUTH_USER, BASIC_AUTH_PASSWORD).
+services:
+  - type: web
+    name: rose-engine
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    # `starter` keeps the service always-on for participants; adjust the plan in the dashboard.
+    plan: starter
+    # No healthCheckPath is set ON PURPOSE: EVERY route (including /health) is behind the basic-auth
+    # gate, so an unauthenticated health probe would 401. Render falls back to an open-port check.
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: WEB_DIST_DIR
+        value: /app/prod/packages/web/dist
+      - key: DATABASE_URL
+        fromDatabase:
+          name: rose-engine-db
+          property: connectionString
+      # Shared basic-auth credentials — entered in the Render dashboard, NEVER committed.
+      - key: BASIC_AUTH_USER
+        sync: false
+      - key: BASIC_AUTH_PASSWORD
+        sync: false
+
+databases:
+  - name: rose-engine-db
+    # Managed PostgreSQL. `free` is fine for a screens demo; upgrade in the dashboard if needed.
+    plan: free
+    postgresMajorVersion: '18'

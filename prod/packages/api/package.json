@@ -12,9 +12,14 @@
     }
   },
   "scripts": {
-    "build": "tsc -b"
+    "build": "tsc -b",
+    "start": "node dist/serve.js",
+    "serve:dev": "tsx watch src/serve.ts",
+    "seed:demo": "node dist/seed-demo.js"
   },
   "dependencies": {
+    "@fastify/basic-auth": "^6.2.0",
+    "@fastify/static": "^8.3.0",
     "@fastify/swagger": "^9.7.0",
     "@rose/ledger": "workspace:*",
     "@rose/reconcile": "workspace:*",

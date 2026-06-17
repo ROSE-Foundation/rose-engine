@@ -1,0 +1,40 @@
+# Keep the build context small and never ship secrets or local build artifacts into the image.
+# node_modules is reinstalled inside the build stage from the committed lockfile.
+node_modules
+**/node_modules
+dist
+**/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+.turbo
+**/.turbo
+coverage
+**/coverage
+
+# Secrets / local env — NEVER copied into the image (credentials come from runtime env vars).
+.env
+.env.*
+!.env.example
+
+# VCS / CI / editor / docs not needed at build time.
+.git
+.github
+.gitignore
+*.log
+.DS_Store
+
+# Foundry / Solidity build output and the throwaway regime (not part of the web service).
+prod/contracts/out
+prod/contracts/cache
+prod/contracts/broadcast
+throwaway
+
+# BMAD tooling / reports not needed in the image.
+_bmad
+_bmad-output
+docs
+bmad-pipeline-report.md
+.agents
+.claude
+.opencode
+.qwen
