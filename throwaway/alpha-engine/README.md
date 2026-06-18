@@ -58,8 +58,12 @@ The spec is loose on order **denomination**; the implemented (frozen) reading:
 ## Run
 
 ```sh
-# Simulate with the Part VIII defaults and write CSV + JSON under throwaway/alpha-engine/out/
+# Simulate with the Part VIII defaults and write CSV + JSON + a self-contained HTML
+# visualisation under throwaway/alpha-engine/out/
 pnpm exec tsx throwaway/alpha-engine/src/run.ts
+
+# Then open the visualisation in a browser (no server needed — data is inlined):
+open throwaway/alpha-engine/out/index.html   # macOS
 
 # Tests
 pnpm exec vitest run throwaway/alpha-engine
@@ -70,3 +74,11 @@ pnpm exec tsc -p throwaway/alpha-engine/tsconfig.json --noEmit
 
 Outputs (`out/series.csv`, `out/series.json`) carry the five §18 series per tick: `p_int`,
 `queue_depth` (long/short), `alive_count` (long/short), `total_capital`, `matched_volume`.
+
+`out/index.html` is a **self-contained** visualisation (`viz.ts`): the run data is inlined and all
+charts are drawn with vanilla `<canvas>` (no libraries, no network) — open it straight from disk.
+It shows the run parameters, a derived-stats grid (distinct prices, range, rises/falls, pool
+drained, bankruptcies, total matched volume…), and six interactive (hover) charts: `p_int(t)`,
+pool `total_capital(t)`, surviving agents (long/short), queue depth (long/short), matched volume,
+and a price histogram. It is **not** part of the ROSE web app — the regime boundary forbids `/prod`
+(including the web surfaces) from importing `/throwaway`.

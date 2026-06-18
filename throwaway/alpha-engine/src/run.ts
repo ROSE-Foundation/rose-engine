@@ -12,6 +12,7 @@ import { DEFAULT_PARAMS } from './params.js';
 import { mulberry32 } from './rng.js';
 import { runSimulation } from './simulation.js';
 import { toCsv, toJson } from './outputs.js';
+import { toHtml } from './viz.js';
 
 /** Fixed seed so the default run reproduces exactly. */
 const DEFAULT_SEED = 12345;
@@ -25,8 +26,10 @@ function main(): void {
 
   const csvPath = resolve(outDir, 'series.csv');
   const jsonPath = resolve(outDir, 'series.json');
+  const htmlPath = resolve(outDir, 'index.html');
   writeFileSync(csvPath, toCsv(result.series), 'utf8');
   writeFileSync(jsonPath, toJson(result), 'utf8');
+  writeFileSync(htmlPath, toHtml(result), 'utf8');
 
   const last = result.series.at(-1);
   console.log(
@@ -40,6 +43,7 @@ function main(): void {
   }
   console.log(`[alpha-engine] wrote ${csvPath}`);
   console.log(`[alpha-engine] wrote ${jsonPath}`);
+  console.log(`[alpha-engine] wrote ${htmlPath}  (open in a browser)`);
 }
 
 main();

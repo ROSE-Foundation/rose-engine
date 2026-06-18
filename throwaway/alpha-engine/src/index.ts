@@ -7,3 +7,4 @@ export * from './init.js';
 export * from './auction.js';
 export * from './simulation.js';
 export * from './outputs.js';
+export * from './viz.js';

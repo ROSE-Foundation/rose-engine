@@ -6,20 +6,30 @@ import { Button } from './components/ui/button.js';
 import { LogoMark } from './components/ui/logo-mark.js';
 import { createApiClient, resolveApiBaseUrl } from './lib/api-client.js';
 import { ApiClientProvider, useGroupView } from './lib/queries.js';
+import { AlphaEngineSurface } from './surfaces/alpha-engine/alpha-engine.js';
 import { CoupledPairSurface } from './surfaces/coupled-pair/coupled-pair.js';
 import { CovenantConsole } from './surfaces/covenant-console/covenant-console.js';
 import { ExchangeTrading } from './surfaces/exchange-trading/exchange-trading.js';
 import { Home } from './surfaces/home/home.js';
 import { SubscriberSurface } from './surfaces/subscriber/subscriber.js';
 
-type Surface = 'home' | 'covenant-console' | 'coupled-pair' | 'exchange-trading' | 'subscriber';
+type Surface =
+  | 'home'
+  | 'covenant-console'
+  | 'coupled-pair'
+  | 'exchange-trading'
+  | 'subscriber'
+  | 'alpha-engine';
 
 // Topnav surfaces (Home is reached via the logo mark, per the mocks). Labels follow index.html.
+// `alpha-engine` is a THROWAWAY R&D PoC embedded as a static asset (see AlphaEngineSurface) — it
+// adds no /prod→/throwaway code dependency.
 const NAV_SURFACES: readonly Surface[] = [
   'exchange-trading',
   'covenant-console',
   'coupled-pair',
   'subscriber',
+  'alpha-engine',
 ];
 
 const SURFACE_LABELS: Record<Surface, string> = {
@@ -28,6 +38,7 @@ const SURFACE_LABELS: Record<Surface, string> = {
   'coupled-pair': 'Coupled Coins',
   'exchange-trading': 'Exchange',
   subscriber: 'Subscriber',
+  'alpha-engine': 'Alpha Engine',
 };
 
 const queryClient = new QueryClient();
@@ -100,6 +111,7 @@ function Shell(): React.JSX.Element {
         {surface === 'coupled-pair' && <CoupledPairPanel />}
         {surface === 'exchange-trading' && <ExchangeTrading onNavigate={setSurface} />}
         {surface === 'subscriber' && <SubscriberPanel />}
+        {surface === 'alpha-engine' && <AlphaEngineSurface />}
       </main>
     </div>
   );
