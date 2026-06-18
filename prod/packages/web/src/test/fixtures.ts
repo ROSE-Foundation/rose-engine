@@ -20,6 +20,8 @@ const eur = (units: string, decimal: string): Money => money('EUR', 2, units, de
 const vcc: GroupViewEntity = {
   entityCode: 'VCC',
   jurisdiction: 'LU',
+  role: 'TREASURY_NOTE_ISSUER',
+  reconciliationStatus: 'RECONCILED',
   accounts: [
     {
       accountId: 'vcc-backing-float',
@@ -59,6 +61,8 @@ const vcc: GroupViewEntity = {
 const tradingCo: GroupViewEntity = {
   entityCode: 'TRADING_CO',
   jurisdiction: 'KY',
+  role: 'TRADING',
+  reconciliationStatus: 'RECONCILED',
   accounts: [
     {
       accountId: 'tco-fee-income',
@@ -115,6 +119,45 @@ export function reconciledGroupView(): GroupViewResponse {
       },
     ],
     coupledPairs: [activePairPosition],
+    covenants: [
+      {
+        key: 'backing-float-floor',
+        label: 'Backing-float floor',
+        kind: 'floor',
+        thresholdBps: 6000,
+        currentBps: 6670,
+        status: 'PASS',
+      },
+      {
+        key: 'deploy-ratio-ceiling',
+        label: 'Deploy ratio (ceiling)',
+        kind: 'ceiling',
+        thresholdBps: 3500,
+        currentBps: 1800,
+        status: 'PASS',
+      },
+      {
+        key: 'client-collateral-coverage',
+        label: 'Client-collateral coverage',
+        kind: 'floor',
+        thresholdBps: 10000,
+        currentBps: 10000,
+        status: 'PASS',
+      },
+    ],
+    netExposure: [
+      { referenceAsset: 'BTC', pairCount: 1, longTotal: '10000', shortTotal: '10000', net: '0' },
+    ],
+    coupledCoinBook: [
+      {
+        referenceAsset: 'BTC',
+        pairs: 1,
+        longNotional: '10000',
+        shortNotional: '10000',
+        collateral: '20000',
+        net: '0',
+      },
+    ],
     chainComparison: { source: 'ledger+chain', divergences: [], anyDivergence: false },
     notes: [],
   };
@@ -151,6 +194,9 @@ export function emptyGroupView(): GroupViewResponse {
     entities: [],
     consolidated: [],
     coupledPairs: [],
+    covenants: [],
+    netExposure: [],
+    coupledCoinBook: [],
     chainComparison: { source: 'ledger-only', divergences: [], anyDivergence: false },
     notes: [],
   };
@@ -190,6 +236,8 @@ export function rebalancingPair(): CoupledPairResponse {
 const tradingCoExec: GroupViewEntity = {
   entityCode: 'TRADING_CO',
   jurisdiction: 'KY',
+  role: 'TRADING',
+  reconciliationStatus: 'RECONCILED',
   accounts: [
     {
       accountId: 'tco-deployed-capital',

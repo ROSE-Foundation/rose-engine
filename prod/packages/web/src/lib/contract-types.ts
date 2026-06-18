@@ -47,3 +47,18 @@ export type CoupledPairState = CoupledPairPosition['state'];
 
 /** The four fixed entity codes. */
 export type EntityCode = GroupViewEntity['entityCode'];
+
+/** A fixed entity's static operational role (FR-1). */
+export type EntityRole = GroupViewEntity['role'];
+
+/** Per-entity reconciliation status derived from the chain-comparison signal. */
+export type ReconciliationStatus = GroupViewEntity['reconciliationStatus'];
+
+/** A single bright-line covenant (threshold + current value as integer basis points). */
+export type Covenant = GroupViewResponse['covenants'][number];
+
+/** Net directional exposure across all coupled pairs. */
+export type NetExposure = GroupViewResponse['netExposure'];
+
+/** One market row of the coupled-coin book (coupled pairs aggregated by reference asset). */
+export type CoupledCoinMarket = GroupViewResponse['coupledCoinBook'][number];

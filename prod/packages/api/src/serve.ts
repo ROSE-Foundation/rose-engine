@@ -22,6 +22,11 @@ import { createHash, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import fastifyBasicAuth from '@fastify/basic-auth';
 import fastifyStatic from '@fastify/static';
+import {
+  COVENANT_THRESHOLD_KEYS,
+  loadCovenantThresholds,
+  type CovenantThresholds,
+} from '@rose/config';
 import { createDb, createPool, migrateUp, type RoseDb } from '@rose/ledger';
 import { makePaperModeServices, PAPER_MODE_BANNER } from '@rose/rose-note';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
@@ -87,6 +92,21 @@ export function isPaperModeRequested(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
   return (env.ENGINE_MODE ?? '').trim().toLowerCase() === 'paper';
+}
+
+/**
+ * Loads the covenant thresholds for the dashboard's covenant monitor — an OPT-IN feature. When NONE
+ * of the `COVENANT_*` keys are set, returns `undefined` (the monitor is simply empty, the read-only
+ * deployable is unaffected). When ANY is set, `loadCovenantThresholds` enforces refuse-if-absent on
+ * ALL three (NFR-4) — a partial/invalid configuration refuses, naming the offenders.
+ */
+export function loadOptionalCovenantThresholds(
+  env: Record<string, string | undefined> = process.env,
+): CovenantThresholds | undefined {
+  const anyPresent = COVENANT_THRESHOLD_KEYS.some(
+    (key) => (env[key] ?? '').trim().length > 0,
+  );
+  return anyPresent ? loadCovenantThresholds(env) : undefined;
 }
 
 /** Reads `DATABASE_URL`, refusing if absent — a deployed environment never uses a local default. */
@@ -198,6 +218,7 @@ async function main(): Promise<void> {
   // refuse-if-absent: validate ALL required environment BEFORE opening any connection.
   const credentials = loadBasicAuthCredentials();
   const databaseUrl = requireDatabaseUrl();
+  const covenantThresholds = loadOptionalCovenantThresholds();
   const webDistDir = process.env.WEB_DIST_DIR ?? defaultWebDistDir();
   const port = Number(process.env.PORT ?? 8080);
 
@@ -213,7 +234,7 @@ async function main(): Promise<void> {
   // mode is EXPLICITLY requested (ENGINE_MODE=paper) — never implicitly. Otherwise they stay absent
   // and their routes return the existing typed 503 (refuse-if-absent); the real on-chain write path
   // requires out-of-band Sepolia secrets and is intentionally deferred (not wired here).
-  let deps: ApiDeps = { db, logger: true };
+  let deps: ApiDeps = { db, logger: true, covenantThresholds };
   if (isPaperModeRequested()) {
     console.warn(`[serve] ${PAPER_MODE_BANNER}`);
     console.log('[serve] paper mode: seeding demo data + composing simulated write services…');
@@ -222,6 +243,7 @@ async function main(): Promise<void> {
     deps = {
       db,
       logger: true,
+      covenantThresholds,
       subscriptions: paper.subscriptions,
       redemptions: paper.redemptions,
       strategy: paper.strategy,

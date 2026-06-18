@@ -22,6 +22,13 @@ export {
   type ChainComparisonView,
   type MoneyView,
   type NavRole,
+  type ReconciliationStatus,
+  type CovenantKind,
+  type CovenantStatus,
+  type CovenantView,
+  type CovenantThresholds,
+  type NetExposureView,
+  type CoupledCoinMarketView,
   type BuildGroupViewOptions,
 } from './group-view.js';
 

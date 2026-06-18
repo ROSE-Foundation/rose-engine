@@ -16,6 +16,9 @@ const emptyGroupView: GroupViewResponse = {
   entities: [],
   consolidated: [],
   coupledPairs: [],
+  covenants: [],
+  netExposure: [],
+  coupledCoinBook: [],
   chainComparison: { source: 'ledger-only', divergences: [], anyDivergence: false },
   notes: [],
 };

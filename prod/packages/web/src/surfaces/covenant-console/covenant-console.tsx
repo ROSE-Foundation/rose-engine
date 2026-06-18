@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react';
 import { CopyTxHash } from '../../components/ui/copy-tx-hash.js';
+import { CovenantBar } from '../../components/ui/covenant-bar.js';
 import { DivergenceBanner } from '../../components/ui/divergence-banner.js';
 import { LiveIndicator } from '../../components/ui/live-indicator.js';
 import { MoneyCell } from '../../components/ui/money-cell.js';
@@ -10,11 +11,14 @@ import { ApiClientError } from '../../lib/api-client.js';
 import type {
   AccountBalance,
   EntityCode,
+  EntityRole,
   GroupViewEntity,
   GroupViewResponse,
   Money,
+  ReconciliationStatus,
 } from '../../lib/contract-types.js';
 import { REFRESH_WINDOW_MS, useGroupView } from '../../lib/queries.js';
+import { cn } from '../../lib/cn.js';
 import { EntitySwitcher, type Scope } from './entity-switcher.js';
 
 /**
@@ -54,6 +58,18 @@ function formatUnits(units: bigint, scale: number): string {
   return `${neg ? '-' : ''}${whole}.${frac}`;
 }
 
+/**
+ * A live ratio (numerator/denominator) as a percent string, computed in exact bigint basis points —
+ * no float in the money path. Returns '—' when the denominator is ≤ 0 (cannot compute honestly).
+ */
+function ratioPercent(numerator: Money | null, denominator: Money | null): string {
+  if (!numerator || !denominator) return '—';
+  const den = BigInt(denominator.smallestUnits);
+  if (den <= 0n) return '—';
+  const bps = (BigInt(numerator.smallestUnits) * 10000n) / den;
+  return `${(Number(bps) / 100).toFixed(1)}%`;
+}
+
 /** The consolidated Group NAV (hero) — the dominant consolidated asset, or null when empty. */
 function groupNav(view: GroupViewResponse, scope: Scope): Money | null {
   if (scope === 'consolidated') return view.consolidated[0]?.nav ?? null;
@@ -66,10 +82,40 @@ function scopedEntities(view: GroupViewResponse, scope: Scope): GroupViewEntity[
   return view.entities.filter((e) => e.entityCode === scope);
 }
 
+/** Readable labels for the four fixed entities' static roles. */
+const ROLE_LABEL: Record<EntityRole, string> = {
+  TREASURY_NOTE_ISSUER: 'Treasury / Note issuer',
+  COORDINATION: 'Coordination',
+  TRADING: 'Trading',
+  COIN_ISSUANCE: 'Coin issuance',
+};
+
+const RECON_STYLE: Record<ReconciliationStatus, { text: string; label: string; glyph: string }> = {
+  RECONCILED: { text: 'text-gain', label: 'Reconciled', glyph: '✓' },
+  DIVERGENT: { text: 'text-warn', label: 'Divergent', glyph: '!' },
+  NOT_CHECKED: { text: 'text-muted-foreground', label: 'Not checked', glyph: '–' },
+};
+
+function ReconciliationBadge({ status }: { status: ReconciliationStatus }): React.JSX.Element {
+  const s = RECON_STYLE[status];
+  return (
+    <span
+      role="status"
+      aria-label={`Reconciliation: ${s.label}`}
+      className={cn('inline-flex items-center gap-1 text-xs font-medium', s.text)}
+    >
+      <span aria-hidden>{s.glyph}</span>
+      {s.label}
+    </span>
+  );
+}
+
 /**
- * Presentational Covenant Console (AC-2, AC-4). Live group NAV hero, per-entity balances table with
- * drill (account → postings → copy-tx-hash), float yield + exposure derived from the group view, the
- * divergence banner, and the entity switcher. Empty state handled here; loading/error in the container.
+ * Presentational Treasury Dashboard / Covenant Console. Live hero KPIs, a bright-line covenant
+ * monitor, net directional exposure, the coupled-coin book by market, a cross-entity reconciliation
+ * table, and the per-account balances drill (account → postings → copy-tx-hash) — all from the live
+ * group view. The divergence banner + entity switcher are retained. Empty state handled here;
+ * loading/error in the container.
  */
 export function CovenantConsoleView({
   view,
@@ -85,9 +131,9 @@ export function CovenantConsoleView({
 
   const entities = useMemo(() => scopedEntities(view, scope), [view, scope]);
   const nav = groupNav(view, scope);
-  const floatBalance = sumNetByType(entities, 'BACKING_FLOAT');
-  const floatYield = sumNetByType(entities, 'FEE_INCOME');
-  const exposure = sumNetByType(entities, 'DEPLOYED_CAPITAL') ?? floatBalance;
+  const backingFloat = sumNetByType(entities, 'BACKING_FLOAT');
+  const clientCollateral = sumNetByType(entities, 'CLIENT_COLLATERAL');
+  const backingRatio = ratioPercent(backingFloat, nav);
 
   if (view.entities.length === 0) {
     return (
@@ -99,7 +145,7 @@ export function CovenantConsoleView({
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-6">
       <DivergenceBanner chainComparison={view.chainComparison} onViewEntry={onViewEntry} />
 
       <div className="flex items-center justify-between">
@@ -111,47 +157,163 @@ export function CovenantConsoleView({
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+      {/* Hero KPIs — Group NAV, backing float, client collateral, and the live backing ratio. */}
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label={scope === 'consolidated' ? 'Group NAV' : `${scope} NAV`}
           figure={nav ? <MoneyCell money={nav} /> : '—'}
         />
         <StatCard
-          label="Float yield (FEE_INCOME)"
-          figure={floatYield ? <MoneyCell money={floatYield} /> : '—'}
+          label="Backing float"
+          figure={backingFloat ? <MoneyCell money={backingFloat} /> : '—'}
         />
-        <StatCard label="Exposure" figure={exposure ? <MoneyCell money={exposure} /> : '—'} />
+        <StatCard
+          label="Client collateral"
+          figure={clientCollateral ? <MoneyCell money={clientCollateral} /> : '—'}
+        />
+        <StatCard label="Backing ratio (of NAV)" figure={backingRatio} />
       </div>
 
-      <Table>
-        <THead>
-          <TR>
-            <TH>Entity</TH>
-            <TH>Account</TH>
-            <TH>Type</TH>
-            <TH>NAV role</TH>
-            <TH>Net</TH>
-          </TR>
-        </THead>
-        <TBody>
-          {entities.flatMap((entity) =>
-            entity.accounts.map((account) => {
-              const key = `${entity.entityCode}:${account.accountId}`;
-              const isOpen = expanded === key;
-              return (
-                <ConsoleRow
-                  key={key}
-                  rowKey={key}
-                  entityCode={entity.entityCode}
-                  account={account}
-                  isOpen={isOpen}
-                  onToggle={() => setExpanded(isOpen ? null : key)}
-                />
-              );
-            }),
-          )}
-        </TBody>
-      </Table>
+      {/* Covenant monitor — the bright lines (group-level). Shown always; an explicit empty-state
+          when no thresholds are configured, rather than silently hiding the section. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-base font-semibold">Covenant monitor — the bright lines</h2>
+        {view.covenants.length === 0 ? (
+          <p className="text-sm text-muted-foreground">
+            Covenant thresholds not configured (set the <code>COVENANT_*</code> parameters to enable
+            the monitor).
+          </p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {view.covenants.map((c) => (
+              <CovenantBar key={c.key} covenant={c} />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Net directional exposure — PER market (delta-neutral by construction ⇒ net ≈ 0). Coupled-pair
+          leg values are raw "units" (no recorded scale), so they are never summed across markets. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-base font-semibold">Net directional exposure</h2>
+        {view.netExposure.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No coupled pairs.</p>
+        ) : (
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            {view.netExposure.map((m) => (
+              <StatCard
+                key={m.referenceAsset}
+                label={`${m.referenceAsset} · net`}
+                figure={
+                  <span className="font-numeric">
+                    {m.net} <span className="text-sm text-muted-foreground">units</span>
+                  </span>
+                }
+                delta={
+                  <span className="font-numeric text-muted-foreground">
+                    <span className="text-long">Σ {m.longTotal}</span> /{' '}
+                    <span className="text-short">Σ {m.shortTotal}</span>
+                  </span>
+                }
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      {/* Coupled-coin book — coupled pairs aggregated by market. */}
+      {view.coupledCoinBook.length > 0 && (
+        <section className="flex flex-col gap-3">
+          <h2 className="font-display text-base font-semibold">Coupled-coin book</h2>
+          <Table>
+            <THead>
+              <TR>
+                <TH>Market</TH>
+                <TH>Pairs</TH>
+                <TH>L notional</TH>
+                <TH>S notional</TH>
+                <TH>Collateral K</TH>
+                <TH>Net</TH>
+              </TR>
+            </THead>
+            <TBody>
+              {view.coupledCoinBook.map((m) => (
+                <TR key={m.referenceAsset}>
+                  <TD>{m.referenceAsset}</TD>
+                  <TD className="font-numeric">{m.pairs}</TD>
+                  <TD className="font-numeric text-long">{m.longNotional} units</TD>
+                  <TD className="font-numeric text-short">{m.shortNotional} units</TD>
+                  <TD className="font-numeric text-gold">{m.collateral} units</TD>
+                  <TD className="font-numeric">{m.net} units</TD>
+                </TR>
+              ))}
+            </TBody>
+          </Table>
+        </section>
+      )}
+
+      {/* Cross-entity reconciliation — role + dominant-asset NAV + reconciliation status. */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-base font-semibold">Cross-entity reconciliation</h2>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Entity</TH>
+              <TH>Role</TH>
+              <TH>NAV</TH>
+              <TH>Status</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {view.entities.map((entity) => (
+              <TR key={entity.entityCode}>
+                <TD>{entity.entityCode}</TD>
+                <TD className="text-muted-foreground">{ROLE_LABEL[entity.role]}</TD>
+                <TD>
+                  {entity.byAsset[0] ? <MoneyCell money={entity.byAsset[0].nav} /> : '—'}
+                </TD>
+                <TD>
+                  <ReconciliationBadge status={entity.reconciliationStatus} />
+                </TD>
+              </TR>
+            ))}
+          </TBody>
+        </Table>
+      </section>
+
+      {/* Account balances — the per-account drill (account → postings → copy-tx-hash). */}
+      <section className="flex flex-col gap-3">
+        <h2 className="font-display text-base font-semibold">Account balances</h2>
+        <Table>
+          <THead>
+            <TR>
+              <TH>Entity</TH>
+              <TH>Account</TH>
+              <TH>Type</TH>
+              <TH>NAV role</TH>
+              <TH>Net</TH>
+            </TR>
+          </THead>
+          <TBody>
+            {entities.flatMap((entity) =>
+              entity.accounts.map((account) => {
+                const key = `${entity.entityCode}:${account.accountId}`;
+                const isOpen = expanded === key;
+                return (
+                  <ConsoleRow
+                    key={key}
+                    rowKey={key}
+                    entityCode={entity.entityCode}
+                    account={account}
+                    isOpen={isOpen}
+                    onToggle={() => setExpanded(isOpen ? null : key)}
+                  />
+                );
+              }),
+            )}
+          </TBody>
+        </Table>
+      </section>
     </div>
   );
 }

@@ -338,11 +338,59 @@ const EntityAssetSubtotalSchema = z.object({
   nav: MoneySchema,
 });
 
+/** The four fixed entities' static operational roles (seeded in migration 0008). */
+export const EntityRoleSchema = z.enum([
+  'TREASURY_NOTE_ISSUER',
+  'COORDINATION',
+  'TRADING',
+  'COIN_ISSUANCE',
+]);
+
+/** Per-entity reconciliation status derived from the group-level chain comparison. */
+export const ReconciliationStatusSchema = z.enum(['RECONCILED', 'DIVERGENT', 'NOT_CHECKED']);
+
 const EntitySchema = z.object({
   entityCode: EntityCodeSchema,
   jurisdiction: z.string(),
+  role: EntityRoleSchema,
+  reconciliationStatus: ReconciliationStatusSchema,
   accounts: z.array(AccountBalanceSchema),
   byAsset: z.array(EntityAssetSubtotalSchema),
+});
+
+/** A bright-line covenant kind (floor = stay ≥ threshold; ceiling = stay ≤ threshold). */
+export const CovenantKindSchema = z.enum(['floor', 'ceiling']);
+
+/** A covenant's live compliance status (NA when the denominator is unavailable). */
+export const CovenantStatusSchema = z.enum(['PASS', 'WATCH', 'BREACH', 'NA']);
+
+/** A single bright-line covenant; threshold + current value as integer basis points (1% = 100 bps). */
+const CovenantSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  kind: CovenantKindSchema,
+  thresholdBps: z.number().int().nonnegative(),
+  currentBps: z.number().int().nullable(),
+  status: CovenantStatusSchema,
+});
+
+/** Net directional exposure for ONE market (never summed across unlike reference assets). */
+const NetExposureSchema = z.object({
+  referenceAsset: z.string(),
+  pairCount: z.number().int().nonnegative(),
+  longTotal: INTEGER_STRING,
+  shortTotal: INTEGER_STRING,
+  net: INTEGER_STRING,
+});
+
+/** One market row of the coupled-coin book (coupled pairs aggregated by reference asset). */
+const CoupledCoinMarketSchema = z.object({
+  referenceAsset: z.string(),
+  pairs: z.number().int().nonnegative(),
+  longNotional: INTEGER_STRING,
+  shortNotional: INTEGER_STRING,
+  collateral: INTEGER_STRING,
+  net: INTEGER_STRING,
 });
 
 const ConsolidatedAssetSchema = z.object({
@@ -391,6 +439,9 @@ export const GroupViewSchema = z
     entities: z.array(EntitySchema),
     consolidated: z.array(ConsolidatedAssetSchema),
     coupledPairs: z.array(CoupledPairPositionSchema),
+    covenants: z.array(CovenantSchema),
+    netExposure: z.array(NetExposureSchema),
+    coupledCoinBook: z.array(CoupledCoinMarketSchema),
     chainComparison: ChainComparisonSchema,
     notes: z.array(z.string()),
   })

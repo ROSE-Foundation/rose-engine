@@ -42,25 +42,52 @@ describe('CovenantConsoleView (presentational)', () => {
   });
 
   it('derives a KPI in the dominant asset only — never adding unlike units across assets', () => {
-    // FEE_INCOME exists in EUR (500.00) and USD (999.00); the Float yield KPI must show the
-    // dominant (first-match) asset's figure, NOT a meaningless cross-asset sum.
+    // BACKING_FLOAT exists in EUR (12480330.00) and USD (777.00); the Backing-float KPI must show
+    // the dominant (first-match) asset's figure, NOT a meaningless cross-asset sum.
     const view = reconciledGroupView();
-    const usd = { asset: 'USD', scale: 2, smallestUnits: '99900', decimal: '999.00' };
-    view.entities[1]!.accounts.push({
-      accountId: 'tco-fee-income-usd',
-      type: 'FEE_INCOME',
+    const usd = { asset: 'USD', scale: 2, smallestUnits: '77700', decimal: '777.00' };
+    view.entities[0]!.accounts.push({
+      accountId: 'vcc-backing-float-usd',
+      type: 'BACKING_FLOAT',
       asset: 'USD',
       scale: 2,
-      navRole: 'EQUITY',
-      normalSide: 'CREDIT',
-      totalDebit: { asset: 'USD', scale: 2, smallestUnits: '0', decimal: '0.00' },
-      totalCredit: usd,
+      navRole: 'ASSET',
+      normalSide: 'DEBIT',
+      totalDebit: usd,
+      totalCredit: { asset: 'USD', scale: 2, smallestUnits: '0', decimal: '0.00' },
       net: usd,
     });
     render(<CovenantConsoleView view={view} now={NOW} />);
-    // The KPI card shows the EUR figure (500.00), not 1499.00 (EUR+USD mixed).
-    expect(screen.getAllByLabelText('500.00 EUR (scale 2)').length).toBeGreaterThan(0);
-    expect(screen.queryByLabelText('1499.00 EUR (scale 2)')).toBeNull();
+    // The KPI card shows the EUR figure (12480330.00), never 12481107.00 (EUR+USD mixed).
+    expect(screen.getAllByLabelText('12480330.00 EUR (scale 2)').length).toBeGreaterThan(0);
+    expect(screen.queryByLabelText('12481107.00 EUR (scale 2)')).toBeNull();
+  });
+
+  it('renders the covenant monitor, coupled-coin book, and cross-entity reconciliation', () => {
+    render(<CovenantConsoleView view={reconciledGroupView()} now={NOW} />);
+    // Covenant monitor — bright lines, each with a label + PASS/WATCH/BREACH status (color+glyph).
+    expect(screen.getByText('Covenant monitor — the bright lines')).toBeInTheDocument();
+    expect(screen.getByText('Backing-float floor')).toBeInTheDocument();
+    expect(screen.getByText('Deploy ratio (ceiling)')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Status: Pass').length).toBeGreaterThan(0);
+    // Net directional exposure + coupled-coin book by market.
+    expect(screen.getByText('Net directional exposure')).toBeInTheDocument();
+    expect(screen.getByText('Coupled-coin book')).toBeInTheDocument();
+    expect(screen.getByText('BTC')).toBeInTheDocument();
+    // Cross-entity reconciliation — role + status.
+    expect(screen.getByText('Cross-entity reconciliation')).toBeInTheDocument();
+    expect(screen.getByText('Treasury / Note issuer')).toBeInTheDocument();
+    expect(screen.getAllByLabelText('Reconciliation: Reconciled').length).toBeGreaterThan(0);
+  });
+
+  it('renders net directional exposure per market (units), never a cross-market sum', () => {
+    render(<CovenantConsoleView view={reconciledGroupView()} now={NOW} />);
+    expect(screen.getByText('BTC · net')).toBeInTheDocument();
+  });
+
+  it('shows an explicit covenant empty-state when no thresholds are configured', () => {
+    render(<CovenantConsoleView view={{ ...reconciledGroupView(), covenants: [] }} now={NOW} />);
+    expect(screen.getByText(/Covenant thresholds not configured/)).toBeInTheDocument();
   });
 
   it('shows the divergence banner when reconcile reports a mismatch, hidden otherwise', () => {

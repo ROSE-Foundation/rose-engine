@@ -1,13 +1,15 @@
-// Consolidated group view (Story 5.5, FR-9). A READ-ONLY assembly of the off-chain ledger into
-// per-entity, per-account-type balances + the consolidated group view (group NAV per asset), the
-// coupled-pair positions, and (optionally) a read-only ledger↔chain divergence signal. It performs
+// Consolidated group view (Story 5.5, FR-9; Treasury Dashboard enrichment). A READ-ONLY assembly of
+// the off-chain ledger into per-entity, per-account-type balances + the consolidated group view
+// (group NAV per asset), the coupled-pair positions, the covenant monitor, net directional exposure,
+// the coupled-coin book, and (optionally) a read-only ledger↔chain divergence signal. It performs
 // SELECTs only — it never writes, never corrects (correction is Story 5.6, D3/NFR-9).
 //
 // EXACT MONEY (NFR-2): every amount originates as an integer smallest-unit `bigint` (from
 // `postings.amount` / `coupled_pairs` NUMERIC) and is formatted at the asset's decimal scale via
 // `@rose/shared` `toDecimalString`. The JSON carries BOTH the raw smallest-unit integer string AND
 // the formatted decimal string, so the text and JSON views derive from the ONE integer source.
-// Binary float is never used.
+// Binary float is never used. Covenant ratios are exposed as integer BASIS POINTS (1% = 100 bps),
+// computed by exact bigint division — never a binary float.
 
 import { assertNotFloat, toDecimalString } from '@rose/shared';
 import {
@@ -19,6 +21,7 @@ import {
   type AccountType,
   type CoupledPairState,
   type EntityCode,
+  type EntityRole,
   type PostingDirection,
   type RoseDb,
 } from '@rose/ledger';
@@ -94,10 +97,22 @@ export interface EntityAssetSubtotal {
   readonly nav: MoneyView;
 }
 
+/** Per-entity reconciliation status, derived from the group-level chain-comparison signal. */
+export type ReconciliationStatus = 'RECONCILED' | 'DIVERGENT' | 'NOT_CHECKED';
+
 /** One of the four fixed entities with its typed accounts and per-asset subtotals. */
 export interface EntityView {
   readonly entityCode: EntityCode;
   readonly jurisdiction: string;
+  /** The entity's static operational role (FR-1; seeded in migration 0008). */
+  readonly role: EntityRole;
+  /**
+   * Reconciliation status derived per entity from the chain comparison: `NOT_CHECKED` when no chain
+   * snapshot was supplied; `DIVERGENT` only when THIS entity holds an account in a diverged
+   * (asset, scale); else `RECONCILED`. (Divergence magnitudes remain group/asset-level in
+   * `chainComparison`; this is the per-entity projection used by the cross-entity table.)
+   */
+  readonly reconciliationStatus: ReconciliationStatus;
   readonly accounts: ReadonlyArray<AccountBalanceView>;
   readonly byAsset: ReadonlyArray<EntityAssetSubtotal>;
 }
@@ -152,6 +167,62 @@ export interface ChainComparisonView {
   readonly anyDivergence: boolean;
 }
 
+/** A bright-line covenant kind: a `floor` (current must stay ≥ threshold) or a `ceiling` (≤). */
+export type CovenantKind = 'floor' | 'ceiling';
+
+/** A covenant's live compliance status. `NA` when the denominator is unavailable (e.g. NAV = 0). */
+export type CovenantStatus = 'PASS' | 'WATCH' | 'BREACH' | 'NA';
+
+/**
+ * A single bright-line covenant computed against the dominant consolidated denomination. Threshold
+ * and current value are exposed as integer BASIS POINTS (1% = 100 bps) so no binary float crosses
+ * the wire. The covenant DEFINITIONS (which ratio each one is) are a documented P0 policy map,
+ * revisable by product — they change no ledger data, mirroring `ACCOUNT_NAV_CLASSIFICATION`.
+ */
+export interface CovenantView {
+  readonly key: string;
+  readonly label: string;
+  readonly kind: CovenantKind;
+  readonly thresholdBps: number;
+  /** The live ratio in bps, or null when the denominator is ≤ 0 (cannot be computed honestly). */
+  readonly currentBps: number | null;
+  readonly status: CovenantStatus;
+}
+
+/**
+ * Net directional exposure for ONE market (reference asset). Delta-neutral by construction ⇒ net ≈ 0.
+ * Totals are summed only WITHIN a reference asset — coupled-pair leg values are raw integer "units"
+ * with no recorded scale, so summing across unlike reference assets would mix denominations. There is
+ * deliberately NO group-wide net scalar.
+ */
+export interface NetExposureView {
+  readonly referenceAsset: string;
+  readonly pairCount: number;
+  /** Σ long-leg values for this market, raw integer "units" string. */
+  readonly longTotal: string;
+  /** Σ short-leg values for this market, raw integer "units" string. */
+  readonly shortTotal: string;
+  /** longTotal − shortTotal (signed), raw integer "units" string. */
+  readonly net: string;
+}
+
+/** One market row of the coupled-coin book: coupled pairs aggregated by reference asset. */
+export interface CoupledCoinMarketView {
+  readonly referenceAsset: string;
+  readonly pairs: number;
+  readonly longNotional: string;
+  readonly shortNotional: string;
+  readonly collateral: string;
+  readonly net: string;
+}
+
+/** Bright-line covenant thresholds as RATIO decimal strings (e.g. '0.60' = 60%). */
+export interface CovenantThresholds {
+  readonly backingFloatFloor: string;
+  readonly clientCollateralRatio: string;
+  readonly deployCeiling: string;
+}
+
 /** The full consolidated group view — a plain, JSON-serialisable object (NO bigint, NO float). */
 export interface GroupView {
   readonly generatedAt: string;
@@ -159,6 +230,12 @@ export interface GroupView {
   readonly entities: ReadonlyArray<EntityView>;
   readonly consolidated: ReadonlyArray<ConsolidatedAssetView>;
   readonly coupledPairs: ReadonlyArray<CoupledPairPositionView>;
+  /** The bright-line covenant monitor (empty when no thresholds were injected). */
+  readonly covenants: ReadonlyArray<CovenantView>;
+  /** Net directional exposure, one entry per market (never summed across unlike reference assets). */
+  readonly netExposure: ReadonlyArray<NetExposureView>;
+  /** Coupled pairs aggregated into a per-market book. */
+  readonly coupledCoinBook: ReadonlyArray<CoupledCoinMarketView>;
   readonly chainComparison: ChainComparisonView;
   /** Explicit, human-facing notes (e.g. the data source per D3). */
   readonly notes: ReadonlyArray<string>;
@@ -168,6 +245,12 @@ export interface GroupView {
 export interface BuildGroupViewOptions {
   /** When supplied, the view aggregates ledger + chain and emits the divergence signal (AC-2). */
   readonly chainSupplies?: ChainSupplySnapshot;
+  /**
+   * When supplied, the view computes the covenant monitor against the dominant consolidated
+   * denomination. Injected by the API composition root from `@rose/config` (refuse-if-absent) —
+   * `@rose/reconcile` never reads env, mirroring the `chainSupplies` injection.
+   */
+  readonly covenantThresholds?: CovenantThresholds;
   /** Injected clock for a deterministic `generatedAt` (tests). Defaults to `new Date()`. */
   readonly now?: Date;
 }
@@ -195,6 +278,66 @@ function moneyView(asset: string, scale: number, amount: bigint): MoneyView {
   });
 }
 
+// Parse a ratio decimal string (e.g. '0.60', '1.00', '0.35') to integer basis points (1% = 100 bps,
+// so 100% = 10000 bps). Exact: no binary float — fractional digits beyond 4 are truncated.
+function ratioToBps(ratio: string): number {
+  const negative = ratio.startsWith('-');
+  const [intPart = '0', fracPart = ''] = ratio.replace('-', '').split('.');
+  const frac4 = (fracPart + '0000').slice(0, 4);
+  const bps = BigInt(intPart) * 10000n + BigInt(frac4);
+  return Number(negative ? -bps : bps);
+}
+
+// Compute one covenant: current ratio (in bps) = numerator/denominator via exact bigint division;
+// null when the denominator is ≤ 0 (cannot honestly compute a ratio). Status compares against the
+// threshold with a 5%-of-threshold WATCH band on the safe side of the limit.
+function computeCovenant(
+  key: string,
+  label: string,
+  kind: CovenantKind,
+  numerator: bigint,
+  denominator: bigint,
+  thresholdRatio: string,
+): CovenantView {
+  const thresholdBps = ratioToBps(thresholdRatio);
+  // A negative denominator (e.g. insolvent NAV < 0) cannot yield an honest ratio: a `floor` can never
+  // be satisfied ⇒ BREACH; a `ceiling` is undefined ⇒ NA. A zero denominator is genuinely NA.
+  if (denominator < 0n) {
+    return Object.freeze({
+      key,
+      label,
+      kind,
+      thresholdBps,
+      currentBps: null,
+      status: kind === 'floor' ? 'BREACH' : 'NA',
+    });
+  }
+  const currentBps = denominator === 0n ? null : Number((numerator * 10000n) / denominator);
+  const status = covenantStatus(kind, currentBps, thresholdBps);
+  return Object.freeze({ key, label, kind, thresholdBps, currentBps, status });
+}
+
+function covenantStatus(
+  kind: CovenantKind,
+  currentBps: number | null,
+  thresholdBps: number,
+): CovenantStatus {
+  if (currentBps === null) return 'NA';
+  // 5% of the threshold — the WATCH margin. `currentBps` is bigint floor-division (truncates toward
+  // zero), so a floor reads conservatively; `Math.max(1, …)` keeps the band from collapsing to 0 for
+  // very small thresholds (which would make WATCH unreachable).
+  const band = Math.max(1, Math.round(thresholdBps * 0.05));
+  if (kind === 'floor') {
+    if (currentBps < thresholdBps) return 'BREACH';
+    if (currentBps < thresholdBps + band) return 'WATCH';
+    return 'PASS';
+  }
+  // ceiling
+  if (currentBps > thresholdBps) return 'BREACH';
+  if (currentBps > thresholdBps - band) return 'WATCH';
+  return 'PASS';
+}
+
 // A per-account aggregation accumulator.
 interface AccountAgg {
   readonly accountId: string;
@@ -210,7 +353,7 @@ interface AccountAgg {
 // per (asset, scale), so the same asset label at two scales is two DISTINCT denominations whose
 // smallest-units must never be summed together. The group view keys every subtotal on this pair.
 function denomKey(asset: string, scale: number): string {
-  return `${asset} ${scale}`;
+  return `${asset} ${scale}`;
 }
 
 function sortByDenom<T extends { asset: string; scale: number }>(rows: T[]): T[] {
@@ -223,10 +366,11 @@ function sortByDenom<T extends { asset: string; scale: number }>(rows: T[]): T[]
  * Builds the consolidated group view (FR-9) by reading the off-chain ledger. STRICTLY READ-ONLY:
  * SELECTs entities/accounts/postings/coupled_pairs/rose_notes, aggregates per-account balances in
  * `bigint`, and assembles per-entity → per-account-type balances, per-entity per-asset subtotals,
- * the consolidated per-asset group NAV, and the coupled-pair positions. When `opts.chainSupplies`
- * is supplied it also emits a read-only divergence signal (ledger ASSET-side quantity vs on-chain
- * `totalSupply`) and labels the source `ledger+chain` (D3 — chain authoritative); it REPORTS
- * divergence and never corrects it (Story 5.6 owns the correcting entry). Returns a plain,
+ * the consolidated per-asset group NAV, the coupled-pair positions, the covenant monitor (when
+ * thresholds are injected), net directional exposure, and the coupled-coin book. When
+ * `opts.chainSupplies` is supplied it also emits a read-only divergence signal (ledger ASSET-side
+ * quantity vs on-chain `totalSupply`) and labels the source `ledger+chain` (D3 — chain authoritative);
+ * it REPORTS divergence and never corrects it (Story 5.6 owns the correcting entry). Returns a plain,
  * JSON-serialisable `GroupView` (no `bigint`, no float).
  */
 export async function buildGroupView(
@@ -243,6 +387,7 @@ export async function buildGroupView(
   const jurisdictionByCode = new Map<EntityCode, string>(
     entityRows.map((e) => [e.code, e.jurisdiction]),
   );
+  const roleByCode = new Map<EntityCode, EntityRole>(entityRows.map((e) => [e.code, e.role]));
 
   // Per-account aggregation seeded from the account rows (so zero-activity accounts still appear).
   const aggById = new Map<string, AccountAgg>();
@@ -292,15 +437,66 @@ export async function buildGroupView(
     );
   }
 
+  // Read-only chain divergence signal (D3 — REPORT only, never correct; 5.6 owns the correction).
+  // Computed before the per-entity assembly so each entity can carry the derived reconciliation status.
+  const source: 'ledger-only' | 'ledger+chain' = opts.chainSupplies
+    ? 'ledger+chain'
+    : 'ledger-only';
+  const divergences: DivergenceView[] = [];
+  if (opts.chainSupplies) {
+    for (const token of opts.chainSupplies.tokens) {
+      // Ledger circulating quantity = Σ over ASSET-classified accounts of this (asset, scale)
+      // denomination of (debit−credit). Scale is matched so a same-label token at another scale is
+      // a different denomination (consistent with the ledger's per-(asset,scale) balance unit).
+      let ledgerQuantity = 0n;
+      for (const agg of aggById.values()) {
+        if (agg.asset !== token.asset || agg.scale !== token.scale) continue;
+        if (ACCOUNT_NAV_CLASSIFICATION[agg.type].navRole !== 'ASSET') continue;
+        ledgerQuantity += agg.debit - agg.credit;
+      }
+      const divergence = token.totalSupply - ledgerQuantity;
+      divergences.push(
+        Object.freeze({
+          asset: token.asset,
+          scale: token.scale,
+          ledgerQuantity: moneyView(token.asset, token.scale, ledgerQuantity),
+          onChainTotalSupply: moneyView(token.asset, token.scale, token.totalSupply),
+          divergence: moneyView(token.asset, token.scale, divergence),
+          diverged: divergence !== 0n,
+        }),
+      );
+    }
+  }
+  const anyDivergence = divergences.some((d) => d.diverged);
+  const chainComparison: ChainComparisonView = Object.freeze({
+    source,
+    divergences,
+    anyDivergence,
+  });
+  // Denominations that actually diverged — used to derive each entity's status HONESTLY (an entity is
+  // DIVERGENT only if it holds an account in a diverged (asset, scale), not because the group did).
+  const divergedDenoms = new Set(
+    divergences.filter((d) => d.diverged).map((d) => denomKey(d.asset, d.scale)),
+  );
+
   // Per-entity assembly, in the fixed entity order.
   const entities: EntityView[] = [];
   for (const code of ENTITY_DISPLAY_ORDER) {
     const jurisdiction = jurisdictionByCode.get(code);
-    if (jurisdiction === undefined) {
-      // Entity not seeded (should never happen — migration 0001 seeds all four). Skip defensively.
+    const role = roleByCode.get(code);
+    if (jurisdiction === undefined || role === undefined) {
+      // Entity not seeded (should never happen — migrations 0001/0008 seed all four). Skip defensively.
       continue;
     }
     const entAggs = [...aggById.values()].filter((a) => a.entityCode === code);
+    // Honest per-entity reconciliation: DIVERGENT only if this entity holds an account in a diverged
+    // (asset, scale); RECONCILED when checked-and-clean; NOT_CHECKED when no chain snapshot.
+    const entReconciliationStatus: ReconciliationStatus =
+      source === 'ledger-only'
+        ? 'NOT_CHECKED'
+        : entAggs.some((a) => divergedDenoms.has(denomKey(a.asset, a.scale)))
+          ? 'DIVERGENT'
+          : 'RECONCILED';
     const entAccounts = entAggs
       .map((a) => accountViewsById.get(a.accountId)!)
       .sort((x, y) => {
@@ -341,7 +537,14 @@ export async function buildGroupView(
     );
 
     entities.push(
-      Object.freeze({ entityCode: code, jurisdiction, accounts: entAccounts, byAsset }),
+      Object.freeze({
+        entityCode: code,
+        jurisdiction,
+        role,
+        reconciliationStatus: entReconciliationStatus,
+        accounts: entAccounts,
+        byAsset,
+      }),
     );
   }
 
@@ -376,7 +579,8 @@ export async function buildGroupView(
     bucket.signedSum += agg.debit - agg.credit;
     consMap.set(key, bucket);
   }
-  const consolidated: ConsolidatedAssetView[] = sortByDenom([...consMap.values()]).map((b) =>
+  const consolidatedBuckets = sortByDenom([...consMap.values()]);
+  const consolidated: ConsolidatedAssetView[] = consolidatedBuckets.map((b) =>
     Object.freeze({
       asset: b.asset,
       scale: b.scale,
@@ -387,6 +591,48 @@ export async function buildGroupView(
       balanced: b.signedSum === 0n,
     }),
   );
+
+  // Covenant monitor — computed against the DOMINANT consolidated denomination, chosen by LARGEST NAV
+  // magnitude (not alphabetical), so covenants anchor on the economically dominant asset, not a
+  // trivial one. Only when thresholds are injected.
+  const covenants: CovenantView[] = [];
+  const navMagnitude = (b: { assets: bigint; liabilities: bigint }): bigint => {
+    const nav = b.assets - b.liabilities;
+    return nav < 0n ? -nav : nav;
+  };
+  const dominant = consolidatedBuckets.reduce<(typeof consolidatedBuckets)[number] | undefined>(
+    (best, b) => (best === undefined || navMagnitude(b) > navMagnitude(best) ? b : best),
+    undefined,
+  );
+  if (opts.covenantThresholds && dominant !== undefined) {
+    let backing = 0n;
+    let deployed = 0n;
+    let clientLiability = 0n;
+    for (const agg of aggById.values()) {
+      if (agg.asset !== dominant.asset || agg.scale !== dominant.scale) continue;
+      const v = accountViewsById.get(agg.accountId)!;
+      const net = BigInt(v.net.smallestUnits);
+      if (agg.type === 'BACKING_FLOAT') backing += net;
+      else if (agg.type === 'DEPLOYED_CAPITAL') deployed += net;
+      else if (agg.type === 'CLIENT_COLLATERAL') clientLiability += net;
+    }
+    const nav = dominant.assets - dominant.liabilities;
+    const th = opts.covenantThresholds;
+    covenants.push(
+      computeCovenant('backing-float-floor', 'Backing-float floor', 'floor', backing, nav, th.backingFloatFloor),
+      computeCovenant('deploy-ratio-ceiling', 'Deploy ratio (ceiling)', 'ceiling', deployed, nav, th.deployCeiling),
+      // Client-collateral coverage: group assets must cover client claims ≥ 100% (clients always made
+      // whole). Honestly computed from existing classifications (NO segregated-asset sub-ledger exists).
+      computeCovenant(
+        'client-collateral-coverage',
+        'Client-collateral coverage',
+        'floor',
+        dominant.assets,
+        clientLiability,
+        th.clientCollateralRatio,
+      ),
+    );
+  }
 
   // Coupled-pair positions + note embedding.
   const noteIdByPairId = new Map<string, string>(noteRows.map((n) => [n.coupledPairId, n.id]));
@@ -407,40 +653,49 @@ export async function buildGroupView(
       }),
     );
 
-  // Read-only chain divergence signal (D3 — REPORT only, never correct; 5.6 owns the correction).
-  const source: 'ledger-only' | 'ledger+chain' = opts.chainSupplies
-    ? 'ledger+chain'
-    : 'ledger-only';
-  const divergences: DivergenceView[] = [];
-  if (opts.chainSupplies) {
-    for (const token of opts.chainSupplies.tokens) {
-      // Ledger circulating quantity = Σ over ASSET-classified accounts of this (asset, scale)
-      // denomination of (debit−credit). Scale is matched so a same-label token at another scale is
-      // a different denomination (consistent with the ledger's per-(asset,scale) balance unit).
-      let ledgerQuantity = 0n;
-      for (const agg of aggById.values()) {
-        if (agg.asset !== token.asset || agg.scale !== token.scale) continue;
-        if (ACCOUNT_NAV_CLASSIFICATION[agg.type].navRole !== 'ASSET') continue;
-        ledgerQuantity += agg.debit - agg.credit;
-      }
-      const divergence = token.totalSupply - ledgerQuantity;
-      divergences.push(
-        Object.freeze({
-          asset: token.asset,
-          scale: token.scale,
-          ledgerQuantity: moneyView(token.asset, token.scale, ledgerQuantity),
-          onChainTotalSupply: moneyView(token.asset, token.scale, token.totalSupply),
-          divergence: moneyView(token.asset, token.scale, divergence),
-          diverged: divergence !== 0n,
-        }),
-      );
-    }
+  // Coupled-coin book — coupled pairs aggregated by reference asset (one row per market).
+  const bookMap = new Map<
+    string,
+    { referenceAsset: string; pairs: number; long: bigint; short: bigint; collateral: bigint }
+  >();
+  for (const p of coupledPairs) {
+    const bucket = bookMap.get(p.referenceAsset) ?? {
+      referenceAsset: p.referenceAsset,
+      pairs: 0,
+      long: 0n,
+      short: 0n,
+      collateral: 0n,
+    };
+    bucket.pairs += 1;
+    bucket.long += BigInt(p.longLegValue);
+    bucket.short += BigInt(p.shortLegValue);
+    bucket.collateral += BigInt(p.collateralPool);
+    bookMap.set(p.referenceAsset, bucket);
   }
-  const chainComparison: ChainComparisonView = Object.freeze({
-    source,
-    divergences,
-    anyDivergence: divergences.some((d) => d.diverged),
-  });
+  const coupledCoinBook: CoupledCoinMarketView[] = [...bookMap.values()]
+    .sort((a, b) => (a.referenceAsset < b.referenceAsset ? -1 : a.referenceAsset > b.referenceAsset ? 1 : 0))
+    .map((b) =>
+      Object.freeze({
+        referenceAsset: b.referenceAsset,
+        pairs: b.pairs,
+        longNotional: b.long.toString(),
+        shortNotional: b.short.toString(),
+        collateral: b.collateral.toString(),
+        net: (b.long - b.short).toString(),
+      }),
+    );
+
+  // Net directional exposure, PER market (projection of the book — never summed across markets, whose
+  // "units" are unlike). Delta-neutral by construction ⇒ each market's net ≈ 0.
+  const netExposure: NetExposureView[] = coupledCoinBook.map((m) =>
+    Object.freeze({
+      referenceAsset: m.referenceAsset,
+      pairCount: m.pairs,
+      longTotal: m.longNotional,
+      shortTotal: m.shortNotional,
+      net: m.net,
+    }),
+  );
 
   const notes: string[] = [
     source === 'ledger+chain'
@@ -456,6 +711,9 @@ export async function buildGroupView(
     entities,
     consolidated,
     coupledPairs,
+    covenants,
+    netExposure,
+    coupledCoinBook,
     chainComparison,
     notes,
   });

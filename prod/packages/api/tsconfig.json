@@ -5,6 +5,7 @@
     "outDir": "dist"
   },
   "references": [
+    { "path": "../config" },
     { "path": "../ledger" },
     { "path": "../reconcile" },
     { "path": "../rose-note" },

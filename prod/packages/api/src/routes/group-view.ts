@@ -20,7 +20,10 @@ export function groupViewRoutes(deps: ApiDeps): FastifyPluginAsyncZod {
         },
       },
       async () => {
-        const view = await buildGroupView(deps.db, { chainSupplies: deps.chainSupplies });
+        const view = await buildGroupView(deps.db, {
+          chainSupplies: deps.chainSupplies,
+          covenantThresholds: deps.covenantThresholds,
+        });
         // `GroupView` uses `readonly` arrays; the response shape is structurally identical (a
         // compile-time-only variance) — cast to the inferred wire type. Runtime object is unchanged.
         return groupViewToJson(view) as GroupViewResponse;

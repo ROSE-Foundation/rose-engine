@@ -232,3 +232,213 @@ describe('buildGroupView — coupled-pair positions + note embedding (AC-1)', ()
     expect(p.noteId).toBe(note.id);
   });
 });
+
+describe('buildGroupView — Treasury Dashboard enrichment', () => {
+  const THRESHOLDS = {
+    backingFloatFloor: '0.60',
+    clientCollateralRatio: '1.00',
+    deployCeiling: '0.35',
+  };
+
+  it('seeds the four entities with their static roles and a NOT_CHECKED status when ledger-only', async () => {
+    const view = await buildGroupView(db, { now: NOW });
+    const byCode = new Map(view.entities.map((e) => [e.entityCode, e]));
+    expect(byCode.get('VCC')!.role).toBe('TREASURY_NOTE_ISSUER');
+    expect(byCode.get('HOLDING')!.role).toBe('COORDINATION');
+    expect(byCode.get('TRADING_CO')!.role).toBe('TRADING');
+    expect(byCode.get('COIN_ISSUER')!.role).toBe('COIN_ISSUANCE');
+    // No chain snapshot ⇒ reconciliation not checked.
+    expect(view.entities.every((e) => e.reconciliationStatus === 'NOT_CHECKED')).toBe(true);
+  });
+
+  it('marks an entity DIVERGENT only when it holds an account in a diverged denomination', async () => {
+    // VCC holds ROSE-L (ASSET 20000); HOLDING holds ROSE-S (ASSET 5000). Each balanced within its asset.
+    const vccFloat = await mkAccount('VCC', 'BACKING_FLOAT', 'ROSE-L', 0);
+    const vccLiab = await mkAccount('VCC', 'NOTE_LIABILITY', 'ROSE-L', 0);
+    const holdFloat = await mkAccount('HOLDING', 'BACKING_FLOAT', 'ROSE-S', 0);
+    const holdLiab = await mkAccount('HOLDING', 'NOTE_LIABILITY', 'ROSE-S', 0);
+    await recordJournalEntry(db, {
+      description: 'rose-l mint',
+      postings: [
+        { accountId: vccFloat, direction: 'DEBIT', amount: 20000n },
+        { accountId: vccLiab, direction: 'CREDIT', amount: 20000n },
+      ],
+    });
+    await recordJournalEntry(db, {
+      description: 'rose-s mint',
+      postings: [
+        { accountId: holdFloat, direction: 'DEBIT', amount: 5000n },
+        { accountId: holdLiab, direction: 'CREDIT', amount: 5000n },
+      ],
+    });
+    // Chain: ROSE-L diverges (15000 ≠ ledger 20000); ROSE-S matches (5000).
+    const view = await buildGroupView(db, {
+      now: NOW,
+      chainSupplies: {
+        source: 'ledger+chain',
+        tokens: [
+          { asset: 'ROSE-L', scale: 0, totalSupply: 15000n },
+          { asset: 'ROSE-S', scale: 0, totalSupply: 5000n },
+        ],
+      },
+    });
+    const byCode = new Map(view.entities.map((e) => [e.entityCode, e]));
+    expect(byCode.get('VCC')!.reconciliationStatus).toBe('DIVERGENT');
+    expect(byCode.get('HOLDING')!.reconciliationStatus).toBe('RECONCILED');
+  });
+
+  it('computes the covenant monitor against the dominant denomination (PASS/WATCH/BREACH)', async () => {
+    const backing = await mkAccount('VCC', 'BACKING_FLOAT', 'EUR', 2); // ASSET
+    const deployed = await mkAccount('VCC', 'DEPLOYED_CAPITAL', 'EUR', 2); // ASSET
+    const client = await mkAccount('VCC', 'CLIENT_COLLATERAL', 'EUR', 2); // LIABILITY
+    const fee = await mkAccount('VCC', 'FEE_INCOME', 'EUR', 2); // EQUITY
+    // assets: backing 7000.00 + deployed 4000.00 = 11000.00; client liability 1000.00; NAV = 10000.00.
+    await recordJournalEntry(db, {
+      description: 'backing vs fee',
+      postings: [
+        { accountId: backing, direction: 'DEBIT', amount: 600000n },
+        { accountId: fee, direction: 'CREDIT', amount: 600000n },
+      ],
+    });
+    await recordJournalEntry(db, {
+      description: 'deploy vs fee',
+      postings: [
+        { accountId: deployed, direction: 'DEBIT', amount: 400000n },
+        { accountId: fee, direction: 'CREDIT', amount: 400000n },
+      ],
+    });
+    await recordJournalEntry(db, {
+      description: 'client collateral in',
+      postings: [
+        { accountId: backing, direction: 'DEBIT', amount: 100000n },
+        { accountId: client, direction: 'CREDIT', amount: 100000n },
+      ],
+    });
+
+    const view = await buildGroupView(db, { now: NOW, covenantThresholds: THRESHOLDS });
+    const byKey = new Map(view.covenants.map((c) => [c.key, c]));
+
+    // backing 700000 / NAV 1000000 = 70% ≥ 60% floor ⇒ PASS.
+    expect(byKey.get('backing-float-floor')).toMatchObject({
+      kind: 'floor',
+      thresholdBps: 6000,
+      currentBps: 7000,
+      status: 'PASS',
+    });
+    // deployed 400000 / NAV 1000000 = 40% > 35% ceiling ⇒ BREACH.
+    expect(byKey.get('deploy-ratio-ceiling')).toMatchObject({
+      kind: 'ceiling',
+      thresholdBps: 3500,
+      currentBps: 4000,
+      status: 'BREACH',
+    });
+    // assets 1100000 / client liability 100000 = 1100% ≥ 100% floor ⇒ PASS.
+    expect(byKey.get('client-collateral-coverage')).toMatchObject({
+      currentBps: 110000,
+      status: 'PASS',
+    });
+  });
+
+  it('returns NA covenants when NAV is zero (no divide-by-zero) and no covenants without thresholds', async () => {
+    const backing = await mkAccount('VCC', 'BACKING_FLOAT', 'EUR', 2);
+    const liab = await mkAccount('VCC', 'NOTE_LIABILITY', 'EUR', 2);
+    // assets 5000.00, liabilities 5000.00 ⇒ NAV = 0.
+    await recordJournalEntry(db, {
+      description: 'subscribe',
+      postings: [
+        { accountId: backing, direction: 'DEBIT', amount: 500000n },
+        { accountId: liab, direction: 'CREDIT', amount: 500000n },
+      ],
+    });
+
+    const withThresholds = await buildGroupView(db, { now: NOW, covenantThresholds: THRESHOLDS });
+    const floor = withThresholds.covenants.find((c) => c.key === 'backing-float-floor')!;
+    expect(floor.currentBps).toBeNull();
+    expect(floor.status).toBe('NA');
+
+    const withoutThresholds = await buildGroupView(db, { now: NOW });
+    expect(withoutThresholds.covenants).toEqual([]);
+  });
+
+  it('flags a floor covenant BREACH (not NA) when NAV is negative (insolvent denominator)', async () => {
+    const backing = await mkAccount('VCC', 'BACKING_FLOAT', 'EUR', 2);
+    const fee = await mkAccount('VCC', 'FEE_INCOME', 'EUR', 2);
+    const liab = await mkAccount('VCC', 'NOTE_LIABILITY', 'EUR', 2);
+    // assets 30.00 (backing), liabilities 50.00 (note); fee debited 20.00 to balance ⇒ NAV = -20.00 < 0.
+    await recordJournalEntry(db, {
+      description: 'insolvent',
+      postings: [
+        { accountId: backing, direction: 'DEBIT', amount: 3000n },
+        { accountId: fee, direction: 'DEBIT', amount: 2000n },
+        { accountId: liab, direction: 'CREDIT', amount: 5000n },
+      ],
+    });
+    const view = await buildGroupView(db, { now: NOW, covenantThresholds: THRESHOLDS });
+    const floor = view.covenants.find((c) => c.key === 'backing-float-floor')!;
+    expect(floor.currentBps).toBeNull();
+    expect(floor.status).toBe('BREACH');
+  });
+
+  it('aggregates net exposure and the coupled-coin book by market', async () => {
+    await createCoupledPair(db, {
+      referenceAsset: 'EUR/USD',
+      anchorPrice: '1.10000000',
+      leverage: '2',
+      collateralPool: 20_000n,
+      floor: '0.5',
+      longLegValue: 10_000n,
+      shortLegValue: 10_000n,
+      state: 'ACTIVE',
+    });
+    await createCoupledPair(db, {
+      referenceAsset: 'EUR/USD',
+      anchorPrice: '1.20000000',
+      leverage: '2',
+      collateralPool: 6_000n,
+      floor: '0.5',
+      longLegValue: 4_000n,
+      shortLegValue: 2_000n,
+      state: 'ACTIVE',
+    });
+    await createCoupledPair(db, {
+      referenceAsset: 'BTC/USD',
+      anchorPrice: '60000.00000000',
+      leverage: '3',
+      collateralPool: 9_000n,
+      floor: '0.6',
+      longLegValue: 5_000n,
+      shortLegValue: 4_000n,
+      state: 'ACTIVE',
+    });
+
+    const view = await buildGroupView(db, { now: NOW });
+    // Net exposure is PER market (never summed across unlike reference assets / units).
+    const exposure = new Map(view.netExposure.map((m) => [m.referenceAsset, m]));
+    expect(exposure.get('EUR/USD')).toEqual({
+      referenceAsset: 'EUR/USD',
+      pairCount: 2,
+      longTotal: '14000',
+      shortTotal: '12000',
+      net: '2000',
+    });
+    expect(exposure.get('BTC/USD')).toEqual({
+      referenceAsset: 'BTC/USD',
+      pairCount: 1,
+      longTotal: '5000',
+      shortTotal: '4000',
+      net: '1000',
+    });
+    // Book grouped by reference asset (sorted): BTC/USD then EUR/USD.
+    const book = new Map(view.coupledCoinBook.map((m) => [m.referenceAsset, m]));
+    expect(book.get('EUR/USD')).toEqual({
+      referenceAsset: 'EUR/USD',
+      pairs: 2,
+      longNotional: '14000',
+      shortNotional: '12000',
+      collateral: '26000',
+      net: '2000',
+    });
+    expect(book.get('BTC/USD')).toMatchObject({ pairs: 1, longNotional: '5000', net: '1000' });
+    assertNoBigint(view);
+  });
+});

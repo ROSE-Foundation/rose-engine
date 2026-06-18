@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { ConfigRefusalError, loadConfig, PARKED_PARAMETER_KEYS } from './config.js';
+import {
+  ConfigRefusalError,
+  COVENANT_THRESHOLD_KEYS,
+  loadConfig,
+  loadCovenantThresholds,
+  PARKED_PARAMETER_KEYS,
+} from './config.js';
 
 /** A fully-populated, valid environment for the six parked parameters. */
 function fullEnv(): Record<string, string> {
@@ -116,5 +122,56 @@ describe('value normalization', () => {
     const env = fullEnv();
     env.MODEL_FLOOR_M = '   ';
     expect(() => loadConfig(env)).toThrow(/MODEL_FLOOR_M/);
+  });
+});
+
+/** A fully-populated, valid environment for the three covenant thresholds. */
+function covenantEnv(): Record<string, string> {
+  return {
+    COVENANT_BACKING_FLOAT_FLOOR: '0.60',
+    COVENANT_CLIENT_COLLATERAL_RATIO: '1.00',
+    COVENANT_DEPLOY_CEILING: '0.35',
+    PATH: '/usr/bin',
+  };
+}
+
+describe('loadCovenantThresholds', () => {
+  it('returns the three validated thresholds from a complete env', () => {
+    expect(loadCovenantThresholds(covenantEnv())).toEqual({
+      backingFloatFloor: '0.60',
+      clientCollateralRatio: '1.00',
+      deployCeiling: '0.35',
+    });
+  });
+
+  it.each(COVENANT_THRESHOLD_KEYS)('refuses by name when %s is missing', (key) => {
+    const env = covenantEnv();
+    delete env[key];
+    expect(() => loadCovenantThresholds(env)).toThrow(ConfigRefusalError);
+    expect(() => loadCovenantThresholds(env)).toThrow(new RegExp(key));
+  });
+
+  it('refuses a non-decimal threshold, naming the key', () => {
+    const env = covenantEnv();
+    env.COVENANT_DEPLOY_CEILING = 'thirty-five-percent';
+    expect(() => loadCovenantThresholds(env)).toThrow(/COVENANT_DEPLOY_CEILING/);
+  });
+
+  it('never substitutes a default for an absent threshold', () => {
+    const env = covenantEnv();
+    delete env.COVENANT_BACKING_FLOAT_FLOOR;
+    expect(() => loadCovenantThresholds(env)).toThrow(ConfigRefusalError);
+  });
+
+  it('refuses a negative threshold, naming the key (would otherwise 500 the group-view response)', () => {
+    const env = covenantEnv();
+    env.COVENANT_DEPLOY_CEILING = '-0.10';
+    expect(() => loadCovenantThresholds(env)).toThrow(/COVENANT_DEPLOY_CEILING/);
+  });
+
+  it('refuses a threshold > 1 (e.g. 60 meaning 6000%, the silent-false-PASS footgun)', () => {
+    const env = covenantEnv();
+    env.COVENANT_DEPLOY_CEILING = '60';
+    expect(() => loadCovenantThresholds(env)).toThrow(/COVENANT_DEPLOY_CEILING/);
   });
 });

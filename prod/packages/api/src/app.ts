@@ -7,7 +7,7 @@
 // is the boundary the live write paths (Stories 6.2→6.6) branch onto.
 import fastifySwagger from '@fastify/swagger';
 import type { RoseDb } from '@rose/ledger';
-import type { ChainSupplySnapshot } from '@rose/reconcile';
+import type { ChainSupplySnapshot, CovenantThresholds } from '@rose/reconcile';
 import type { RedemptionService, StrategyExecutor, SubscriptionService } from '@rose/rose-note';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import {
@@ -40,6 +40,12 @@ export interface ApiDeps {
   readonly db: RoseDb;
   /** Optional on-chain supply snapshot for the `/group-view` divergence signal (injected port). */
   readonly chainSupplies?: ChainSupplySnapshot;
+  /**
+   * Optional bright-line covenant thresholds for the `/group-view` covenant monitor. Loaded by the
+   * composition root from `@rose/config` (`loadCovenantThresholds`, refuse-if-absent) and injected —
+   * the API/reconcile layers never read env. When absent, the covenant monitor is empty.
+   */
+  readonly covenantThresholds?: CovenantThresholds;
   /**
    * Optional Rose Note subscription service (the `@rose/rose-note` composition layer, Story 6.2,
    * FR-11). Injected port — the API gains NO direct `@rose/chain`/`viem` edge; the chain edge lives

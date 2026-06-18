@@ -50,6 +50,9 @@ importers:
       '@fastify/swagger':
         specifier: ^9.7.0
         version: 9.7.0
+      '@rose/config':
+        specifier: workspace:*
+        version: link:../config
       '@rose/ledger':
         specifier: workspace:*
         version: link:../ledger

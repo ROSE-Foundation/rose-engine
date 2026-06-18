@@ -95,3 +95,77 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
   }
   return Object.freeze(out) as unknown as RoseConfig;
 }
+
+// ─── Covenant thresholds (Treasury Dashboard) ─────────────────────────────────────────────────────
+// Bright-line covenant thresholds expressed as RATIO decimal strings (e.g. '0.60' = 60%). Loaded
+// separately from `RoseConfig` so existing consumers are unaffected, but with the SAME
+// refuse-if-absent discipline (NFR-4): a missing/invalid threshold refuses, never defaults. The API
+// composition root loads these and injects them into `buildGroupView` (which itself never reads env).
+
+// A covenant threshold is a RATIO in [0, 1] (e.g. '0.60' = 60%). Reject negatives (a negative
+// threshold would make the `/group-view` response fail validation ⇒ 500) and values > 1 (e.g. '60'
+// would mean 6000% and silently never trip a ceiling) — refuse-if-invalid, naming the key.
+const covenantRatioString = decimalString.refine(
+  (s) => {
+    const n = Number(s);
+    return Number.isFinite(n) && n >= 0 && n <= 1;
+  },
+  'must be a ratio between 0 and 1 (e.g. 0.60 for 60%)',
+);
+
+const CovenantThresholdsSchema = z.object({
+  COVENANT_BACKING_FLOAT_FLOOR: covenantRatioString,
+  COVENANT_CLIENT_COLLATERAL_RATIO: covenantRatioString,
+  COVENANT_DEPLOY_CEILING: covenantRatioString,
+});
+
+export type CovenantThresholdKey = keyof z.infer<typeof CovenantThresholdsSchema>;
+export const COVENANT_THRESHOLD_KEYS = Object.keys(
+  CovenantThresholdsSchema.shape,
+) as CovenantThresholdKey[];
+
+/** The validated covenant thresholds (ratio decimal strings; never JS `number` — NFR-2). */
+export interface CovenantThresholds {
+  /** Backing-float floor as a ratio of NAV (e.g. '0.60' = 60% minimum). */
+  readonly backingFloatFloor: string;
+  /** Client-collateral coverage floor as a ratio (e.g. '1.00' = 100% minimum). */
+  readonly clientCollateralRatio: string;
+  /** Deploy-ratio ceiling as a ratio of NAV (e.g. '0.35' = 35% maximum). */
+  readonly deployCeiling: string;
+}
+
+const COVENANT_KEY_TO_FIELD: Record<CovenantThresholdKey, keyof CovenantThresholds> = {
+  COVENANT_BACKING_FLOAT_FLOOR: 'backingFloatFloor',
+  COVENANT_CLIENT_COLLATERAL_RATIO: 'clientCollateralRatio',
+  COVENANT_DEPLOY_CEILING: 'deployCeiling',
+};
+
+/**
+ * Loads and validates the three covenant thresholds from `env`. Returns a typed, frozen object on
+ * success; throws `ConfigRefusalError` naming every offending key on any absence/invalidity
+ * (refuse-if-absent, NFR-4). Never substitutes a default.
+ */
+export function loadCovenantThresholds(
+  env: Record<string, string | undefined> = process.env,
+): CovenantThresholds {
+  if (env === null || typeof env !== 'object') {
+    throw new ConfigRefusalError([...COVENANT_THRESHOLD_KEYS]);
+  }
+  const result = CovenantThresholdsSchema.safeParse(env);
+  if (!result.success) {
+    const named = [
+      ...new Set(
+        result.error.issues
+          .map((issue) => String(issue.path[0]))
+          .filter((key) => key !== 'undefined'),
+      ),
+    ].sort();
+    throw new ConfigRefusalError(named.length > 0 ? named : [...COVENANT_THRESHOLD_KEYS]);
+  }
+  const v = result.data;
+  const out: Record<string, string> = {};
+  for (const key of COVENANT_THRESHOLD_KEYS) {
+    out[COVENANT_KEY_TO_FIELD[key]] = v[key];
+  }
+  return Object.freeze(out) as unknown as CovenantThresholds;
+}
