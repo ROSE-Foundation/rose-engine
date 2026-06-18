@@ -3,19 +3,30 @@ import { useState } from 'react';
 import { ThemeProvider } from './components/theme-provider.js';
 import { ThemeToggle } from './components/theme-toggle.js';
 import { Button } from './components/ui/button.js';
+import { LogoMark } from './components/ui/logo-mark.js';
 import { createApiClient, resolveApiBaseUrl } from './lib/api-client.js';
 import { ApiClientProvider, useGroupView } from './lib/queries.js';
 import { CoupledPairSurface } from './surfaces/coupled-pair/coupled-pair.js';
 import { CovenantConsole } from './surfaces/covenant-console/covenant-console.js';
 import { ExchangeTrading } from './surfaces/exchange-trading/exchange-trading.js';
+import { Home } from './surfaces/home/home.js';
 import { SubscriberSurface } from './surfaces/subscriber/subscriber.js';
 
-type Surface = 'covenant-console' | 'coupled-pair' | 'exchange-trading' | 'subscriber';
+type Surface = 'home' | 'covenant-console' | 'coupled-pair' | 'exchange-trading' | 'subscriber';
+
+// Topnav surfaces (Home is reached via the logo mark, per the mocks). Labels follow index.html.
+const NAV_SURFACES: readonly Surface[] = [
+  'exchange-trading',
+  'covenant-console',
+  'coupled-pair',
+  'subscriber',
+];
 
 const SURFACE_LABELS: Record<Surface, string> = {
-  'covenant-console': 'Covenant Console',
-  'coupled-pair': 'Coupled-Pair',
-  'exchange-trading': 'Exchange / Trading',
+  home: 'Home',
+  'covenant-console': 'Treasury Dashboard',
+  'coupled-pair': 'Coupled Coins',
+  'exchange-trading': 'Exchange',
   subscriber: 'Subscriber',
 };
 
@@ -53,45 +64,43 @@ function SubscriberPanel(): React.JSX.Element {
 }
 
 function Shell(): React.JSX.Element {
-  const [surface, setSurface] = useState<Surface>('covenant-console');
-  const operatorSurfaces: Surface[] = ['covenant-console', 'coupled-pair', 'exchange-trading'];
+  const [surface, setSurface] = useState<Surface>('home');
 
   return (
-    <div className="flex min-h-screen">
-      <nav className="flex w-56 shrink-0 flex-col gap-1 border-r border-border p-4">
-        <span className="mb-4 font-display text-lg font-semibold text-foreground">ROSE Engine</span>
-        <span className="px-1 text-xs uppercase tracking-wide text-muted-foreground">Operator</span>
-        {operatorSurfaces.map((s) => (
-          <Button
-            key={s}
-            variant={surface === s ? 'primary' : 'ghost'}
-            onClick={() => setSurface(s)}
-          >
-            {SURFACE_LABELS[s]}
-          </Button>
-        ))}
-        <span className="mt-4 px-1 text-xs uppercase tracking-wide text-muted-foreground">
-          Subscriber
-        </span>
-        <Button
-          variant={surface === 'subscriber' ? 'primary' : 'ghost'}
-          onClick={() => setSurface('subscriber')}
+    <div className="flex min-h-screen flex-col">
+      <header className="flex items-center gap-4 border-b border-border px-6 py-3">
+        <button
+          type="button"
+          onClick={() => setSurface('home')}
+          className="flex items-center gap-2.5"
+          aria-label="Go to home"
         >
-          {SURFACE_LABELS.subscriber}
-        </Button>
-      </nav>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex items-center justify-between border-b border-border px-6 py-3">
-          <span className="font-display text-base font-semibold">{SURFACE_LABELS[surface]}</span>
+          <LogoMark className="h-7 w-7" />
+          <span className="font-display text-base font-semibold">ROSE Engine</span>
+        </button>
+        <nav className="flex items-center gap-1">
+          {NAV_SURFACES.map((s) => (
+            <Button
+              key={s}
+              size="sm"
+              variant={surface === s ? 'primary' : 'ghost'}
+              onClick={() => setSurface(s)}
+            >
+              {SURFACE_LABELS[s]}
+            </Button>
+          ))}
+        </nav>
+        <div className="ml-auto">
           <ThemeToggle />
-        </header>
-        <main className="flex-1 p-6">
-          {surface === 'covenant-console' && <CovenantConsole />}
-          {surface === 'coupled-pair' && <CoupledPairPanel />}
-          {surface === 'exchange-trading' && <ExchangeTrading />}
-          {surface === 'subscriber' && <SubscriberPanel />}
-        </main>
-      </div>
+        </div>
+      </header>
+      <main className="flex-1 p-6">
+        {surface === 'home' && <Home onSelect={setSurface} />}
+        {surface === 'covenant-console' && <CovenantConsole />}
+        {surface === 'coupled-pair' && <CoupledPairPanel />}
+        {surface === 'exchange-trading' && <ExchangeTrading />}
+        {surface === 'subscriber' && <SubscriberPanel />}
+      </main>
     </div>
   );
 }
