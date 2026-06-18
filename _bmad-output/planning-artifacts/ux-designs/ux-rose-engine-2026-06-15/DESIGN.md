@@ -1,75 +1,76 @@
 ---
 name: ROSE Engine Surfaces
-description: Internal/operational + subscriber surfaces for the ROSE Engine (FR-14). Sober institutional fintech register with a single ROSE rosé accent. shadcn/ui on React 18 + Vite + Tailwind; this DESIGN.md specifies the brand-layer + data-product delta only. Light + dark via semantic tokens.
+description: Internal/operational + subscriber surfaces for the ROSE Engine (FR-14). Dark instrument-terminal register derived from the docs/mocks/*.html design (supersedes the original sober-rosé direction). No single brand color — a conic logo mark + directional data colors carry the identity. React 18 + Vite + Tailwind v4; Fraunces / Inter / IBM Plex Mono.
 status: final
 created: 2026-06-15
-updated: 2026-06-15
+updated: 2026-06-18
+supersedes: 'Original sober-institutional rosé direction (2026-06-15). New source of truth: docs/mocks/{index,dashboard,coupled-coins,exchange}.html.'
 sources:
+  - ../../../../docs/mocks/dashboard.html
+  - ../../../../docs/mocks/exchange.html
   - ../../prds/prd-rose-engine-2026-06-15/prd.md
   - ../../architecture.md
 colors:
-  # Brand-layer overrides on top of shadcn defaults. Unlisted tokens
-  # (background, foreground, muted, muted-foreground, popover, card,
-  # border, input, ring, destructive) inherit from shadcn light/dark.
-  primary: '#B12A66'            # ROSE rosé — primary actions, active nav, brand marks
-  primary-foreground: '#FFFFFF'
-  primary-dark: '#E85C97'
-  primary-foreground-dark: '#1A0E14'
-  # Financial semantic tokens — PRODUCT-CRITICAL, not decorative. [ASSUMPTION] hexes.
-  gain: '#1E8E5A'               # long leg up / positive delta / NAV up
-  gain-dark: '#34D399'
-  loss: '#C0392B'               # short leg / negative delta / NAV down
-  loss-dark: '#F87171'
-  warn: '#B7791F'               # floor-approach, stale data, pending tx
-  warn-dark: '#FBBF24'
-  info: '#2563EB'               # neutral system/info, reconcile notices
-  info-dark: '#60A5FA'
+  # Mock palette (docs/mocks/*.html :root). Dark is the default + fully-designed mode.
+  bg: '#0e1218'              # app background
+  panel: '#161c25'          # card surface
+  panel2: '#1c232e'         # elevated / active-nav / primary action
+  panel3: '#222a36'         # raised / hover surface
+  line: '#28313e'           # hairline border
+  line2: '#323c4a'          # stronger border / hover
+  ink: '#e9edf2'            # primary foreground
+  sub: '#9aa6b4'            # muted foreground
+  dim: '#5e6a78'            # dimmest text / captions
+  # Directional DATA colors — PRODUCT-CRITICAL, not decorative.
+  long: '#2bb89e'           # long leg / gains / positive delta / NAV up / live pulse
+  short: '#e0685f'          # short leg / losses / negative delta / NAV down
+  gold: '#d3a64a'           # collateral K / risk / floor / pending
+  blue: '#5b9bd5'           # client / info / neutral system
+  purple: '#7a6bc4'         # rates / yield streams
 typography:
-  # Body / label / caption inherit shadcn (Geist Sans). Two roles added/overridden.
-  numeric:
-    fontFamily: 'IBM Plex Mono'   # [ASSUMPTION] — tabular figures for all money/price/qty
-    fontFeatureSettings: "'tnum' 1, 'zero' 1"
+  body:
+    fontFamily: 'Inter'
     fontSize: 14px
-    lineHeight: '1.4'
   display:
-    fontFamily: 'Geist Sans'
-    fontSize: 28px
-    fontWeight: '600'
-    lineHeight: '1.2'
-    letterSpacing: -0.01em
+    fontFamily: 'Fraunces'        # serif titles / hero headings
+    opticalSizing: 'auto'
+    weight: '400–600'
+  numeric:
+    fontFamily: 'IBM Plex Mono'   # tabular figures for all money/price/qty/% and tx-hash
+    fontFeatureSettings: "'tnum' 1"
+    fontSize: 14px
 rounded:
-  # Crisp, tool-like — reads "instrument" not "consumer app".
-  sm: 4px
-  md: 6px
-  lg: 8px
-  full: 9999px               # status/lifecycle badges only
-spacing:
-  # shadcn / Tailwind 4-based scale inherited. One dense token added for tables.
-  table-cell-y: 6px          # tighter vertical row padding for data-dense tables
-  table-cell-x: 12px
+  sm: 6px
+  md: 8px
+  lg: 12px                  # mock card radius (--r)
+  full: 9999px              # status/lifecycle badges + live dots only
 components:
+  logo-mark:
+    note: 'conic-gradient(from 200deg, long, short, gold, long) — the identity in lieu of a brand color'
+  card:
+    background: '{colors.panel}'
+    border: '1px solid {colors.line}'
+    radius: '{rounded.lg}'
+    hover: 'border → {colors.line2}, subtle lift'
   button-primary:
-    background: '{colors.primary}'
-    foreground: '{colors.primary-foreground}'
-    radius: '{rounded.md}'
+    background: '{colors.panel2}'   # elevated neutral — NO brand color
+    foreground: '{colors.ink}'
+  nav-active:
+    background: '{colors.panel2}'
+    foreground: '{colors.ink}'
   money-cell:
     fontFamily: '{typography.numeric.fontFamily}'
     align: right
-    note: 'tabular figures; asset symbol + scale always shown; never JS float'
   delta-up:
-    foreground: '{colors.gain}'
+    foreground: '{colors.long}'
     glyph: '▴'
   delta-down:
-    foreground: '{colors.loss}'
+    foreground: '{colors.short}'
     glyph: '▾'
   live-indicator:
-    foreground: '{colors.gain}'
+    foreground: '{colors.long}'
     glyph: '●'
-    note: 'pulses while data is fresh; turns {colors.warn} when stale'
-  divergence-banner:
-    background: '{colors.warn}'
-    foreground: '#1A1208'
-    radius: '{rounded.md}'
+    note: 'pulses while fresh; turns {colors.gold} when stale'
   status-badge:
     radius: '{rounded.full}'
     note: 'lifecycle PENDING|ACTIVE|REBALANCING|PARTIAL|SETTLING|CLOSED — color-mapped, never color-only'
@@ -77,70 +78,65 @@ components:
 
 ## Brand & Style
 
-The ROSE Engine surfaces are **instruments, not marketing**. They are operated by stewards, an investment manager, and a small set of sophisticated subscribers, all reading **live financial data** they must be able to trust on sight. The register is therefore **sober institutional fintech**: ink-on-paper neutrality, dense legible tables, restraint everywhere — closer to a Bloomberg terminal or a Stripe dashboard than a consumer app. Credibility is the brand: a regulated system must *look* exact.
+The ROSE Engine surfaces are **instruments, not marketing** — operated by stewards, an investment manager, and a small set of sophisticated subscribers reading **live financial data** they must trust on sight. The register is a **dark institutional trading terminal** (Bloomberg/terminal lineage): near-black `#0e1218` canvas, dense legible tables, restraint everywhere. Credibility is the brand: a regulated system must *look* exact.
 
-A single brand color — **ROSE rosé (`#B12A66`)** — carries the ROSE identity. It appears on primary actions, active navigation, and brand marks, and **nowhere else**. It never colors data: gains, losses, statuses, and deltas use the financial semantic tokens, never the brand color. The discipline is one-brand-color-and-stop.
+There is **no single brand color.** The identity is carried by the **conic logo mark** (`long → short → gold`) and by the **directional data colors** themselves. The earlier sober-rosé direction is superseded — rosé no longer appears anywhere. Active navigation and primary actions use the **elevated neutral** (`panel2 #1c232e`), exactly as the mocks do.
 
-This DESIGN.md inherits **shadcn/ui** defaults wholesale and specifies only the delta: the rosé primary, the financial semantic tokens (which are product-critical, not decorative), a monospace numeric type role, crisp corners, and a handful of data-product components. Everything shadcn ships (Button variants, Dialog, Sheet, Command, Popover, Tabs, Toast) inherits as-is. `[ASSUMPTION]` shadcn over Mantine — confirm; if Mantine, the same token semantics port over.
+This DESIGN.md is the brand + data-product layer on React 18 + Vite + **Tailwind v4** (tokens declared in `index.css` via `@theme inline`; no `tailwind.config`). Generic chrome (inputs, dialogs, popovers) inherits neutral panel tokens.
 
 ## Colors
 
-Brand layer + financial semantics + shadcn defaults for all chrome.
+Dark base + directional data semantics. Light mode is a **secondary toggle** that reuses the data colors on a neutral light chrome; it is intentionally **not** a separately-designed palette (the mocks are dark-only).
 
-- **ROSE rosé (`#B12A66` light / `#E85C97` dark)** — the one brand color. Primary buttons, active nav item, brand mark, subscribe call-to-action. Replaces shadcn `primary`. Never used for data, state, or delta.
-- **Gain (`#1E8E5A` / `#34D399`)**, **Loss (`#C0392B` / `#F87171`)** — long-leg/short-leg, positive/negative delta, NAV direction. Always paired with a glyph (`▴`/`▾`) so meaning never rests on color alone.
-- **Warn (`#B7791F` / `#FBBF24`)** — floor approach, **stale live data**, **pending on-chain tx**, ledger↔chain **divergence** banner.
-- **Info (`#2563EB` / `#60A5FA`)** — neutral system notices, reconcile-clean confirmations.
-- **All chrome tokens** (`background`, `foreground`, `muted`, `border`, `input`, `ring`, `card`, `popover`, `destructive`) inherit shadcn light/dark. **Both modes are first-class** (user-toggleable); components must reference semantic tokens, never raw hex.
+- **Surfaces:** `bg #0e1218` → `panel #161c25` (cards) → `panel2 #1c232e` (elevated / active) → `panel3 #222a36` (hover). Borders `line #28313e`, stronger `line2 #323c4a`.
+- **Text:** `ink #e9edf2`, `sub #9aa6b4`, `dim #5e6a78`.
+- **Directional data (always paired with a glyph so meaning never rests on color alone):** `long #2bb89e` (long leg, gains, NAV up, live pulse), `short #e0685f` (short leg, losses, NAV down), `gold #d3a64a` (collateral K, floor, risk, pending), `blue #5b9bd5` (client, info), `purple #7a6bc4` (rates, yield).
 
-Avoid: gradients, decorative color, using rosé for data, color-only signaling, a second brand color.
+Avoid: a brand/accent color beyond the logo mark, decorative gradients on data, color-only signaling.
 
 ## Typography
 
-Body / label / caption inherit shadcn's **Geist Sans** ramp. Two roles are specified:
-
-- **`numeric` — IBM Plex Mono with tabular figures (`tnum`).** `[ASSUMPTION]`. Every monetary amount, price, quantity, leg value (`V_A`/`V_B`/`K`/floor/anchor), percentage, and tx-hash fragment renders in this role so digits align in columns and never reflow. This is non-negotiable for a money product — misaligned figures read as untrustworthy.
-- **`display` — Geist Sans 28px/600.** Surface titles and primary KPI figures (Group NAV). Sober, not ornamental.
+- **Inter** — body, labels, table name cells.
+- **Fraunces** (serif, optical sizing) — surface titles and hero headings only. Sober, not ornamental.
+- **IBM Plex Mono** (tabular `tnum`) — every monetary amount, price, quantity, leg value (`V_A`/`V_B`/`K`/floor/anchor), percentage, and tx-hash fragment, so digits align in columns and never reflow. Non-negotiable for a money product.
 
 ## Layout & Spacing
 
-shadcn / Tailwind 4-based scale inherited (4, 8, 12, 16, 24, 32, 48, 64). Two density tokens added for tables (`table-cell-y` 6px, `table-cell-x` 12px) because these are **data-dense** surfaces — unlike a typical shadcn app, wide multi-column tables are the point.
+Tailwind 4 scale (4, 8, 12, 16, 24, 32). Dense table padding (~6px y / 10px x) — wide multi-column tables are the point.
 
-- **Operator surfaces (Covenant Console, Coupled-Pair, Exchange/Trading):** desktop, **full-width data layouts** (no `max-w` clamp); persistent left nav + top context bar (entity/group switcher, live indicator, light/dark toggle); designed for ≥1280px.
-- **Subscriber surfaces:** **responsive**, single-column on mobile expanding to a centered `max-w-2xl` reading column on desktop.
+- **Operator surfaces (Covenant Console, Coupled-Pair, Exchange/Trading):** desktop, full-width data layouts; persistent top bar (logo + topnav with neutral active item + live indicator + clock) and, where useful, multi-column workspaces (e.g. exchange 280px / 1fr / 320px). Designed for ≥1280px.
+- **Subscriber surfaces:** responsive, single-column on mobile expanding to a centered reading column on desktop.
 
 ## Elevation & Depth
 
-Flat, institutional. Hierarchy comes from **borders and spacing, not shadows**. Inherit shadcn's subtle hover shadow only; add no elevation as a hierarchy device. Sticky table headers use a hairline border, not a drop shadow.
+Flat and dark. Hierarchy from **borders and surface steps** (`panel` → `panel2` → `panel3`), not heavy shadows. Cards lift subtly on hover (stronger border + small translate), matching the mock `.card:hover`. Sticky table headers use a hairline border.
 
 ## Shapes
 
-Crisp: `rounded/sm` (4px) inputs, `rounded/md` (6px) cards/buttons/banners, `rounded/lg` (8px) dialogs. **Pill (`rounded/full`) reserved for status/lifecycle badges only.** Tables are square-edged.
+`rounded/sm` (6px) inputs, `rounded/md` (8px) buttons/small controls, `rounded/lg` (12px) cards/banners. **Pill (`rounded/full`) reserved for status/lifecycle badges and live dots.** Tables are square-edged.
 
 ## Components
 
-Used as-is from shadcn (don't customize): `Button` (non-primary variants), `Dialog`, `Sheet`, `Popover`, `DropdownMenu`, `Toast`, `Tabs`, `Separator`, `Skeleton`, `Command`.
+Brand + data-product components:
 
-Brand-layer + data-product components:
-
-- **Button (primary)** — `{colors.primary}` rosé fill, `{rounded.md}`. Other variants inherit shadcn.
-- **Money cell** — `{typography.numeric}`, right-aligned, asset symbol + decimal scale always shown, rendered from decimal strings (never JS `number`). The atom of every table.
-- **Delta indicator** — `{components.delta-up}` / `{components.delta-down}`: glyph + semantic color + signed value.
-- **Status badge** — pill mapping the six lifecycle states + `live`/`divergent`/`pending`. Color-mapped but label-bearing (never color-only).
-- **Live indicator** — `{colors.gain}` pulse while fresh; `{colors.warn}` when stale beyond the refresh window.
-- **Divergence banner** — `{colors.warn}` banner shown when reconcile detects a ledger↔chain mismatch; states the correction-toward-chain action.
-- **Stat / KPI card** — label + `display` figure + delta indicator; used on the Covenant Console.
-- **Confirm-action panel** — subscribe/redeem two-step (review → confirm) surfacing the on-chain consequence; primary action in rosé.
+- **Logo mark** — conic `long→short→gold` gradient chip; the identity, used top-left of every surface.
+- **Money cell** — IBM Plex Mono, right-aligned, asset symbol + decimal scale always shown, rendered from decimal strings (never JS `number`). The atom of every table.
+- **Delta indicator** — glyph + directional color + signed value (`▴` long, `▾` short).
+- **Status badge** — pill mapping the six lifecycle states + `live`/`divergent`/`pending`; color-mapped but label-bearing.
+- **Live indicator** — `long` pulse while fresh; `gold` when stale.
+- **Divergence banner** — `gold` banner shown when reconcile detects a ledger↔chain mismatch; states the correction-toward-chain action.
+- **Stat / KPI card** — label + Fraunces/mono figure + left accent stripe (per dashboard mock) + delta indicator.
+- **Confirm-action panel** — subscribe/redeem two-step (review → confirm) surfacing the on-chain consequence.
 - **Entity switcher** — top-bar control scoping operator surfaces to `VCC` / `HOLDING` / `TRADING_CO` / `COIN_ISSUER` / consolidated group.
 
 ## Do's and Don'ts
 
 | Do | Don't |
 |---|---|
-| Inherit shadcn defaults for all chrome | Override shadcn tokens beyond `primary` + the financial semantics |
-| Use rosé only for primary action / brand / active nav | Use rosé for data, deltas, or status |
-| Render every figure in `numeric` (tabular mono) | Use proportional fonts or JS floats for money |
-| Pair every gain/loss color with a glyph | Signal state by color alone (fails AA + colorblind) |
+| Build on the dark mock palette as the default | Reintroduce rosé or any single brand color |
+| Use the conic logo mark for identity | Add an accent color for chrome/active states (use `panel2`) |
+| Render every figure in IBM Plex Mono (tabular) | Use proportional fonts or JS floats for money |
+| Use Fraunces for titles only | Use serif for body or data |
+| Pair every long/short color with a glyph | Signal state by color alone (fails AA + colorblind) |
 | Full-width dense tables on operator surfaces | Clamp operator tables to a narrow reading width |
 | Show asset symbol + scale on every amount | Render a bare number without its unit |
-| Surface refusals/divergence explicitly (warn) | Swallow a refusal into a silent success |

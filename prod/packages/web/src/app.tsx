@@ -59,7 +59,7 @@ function Shell(): React.JSX.Element {
   return (
     <div className="flex min-h-screen">
       <nav className="flex w-56 shrink-0 flex-col gap-1 border-r border-border p-4">
-        <span className="mb-4 font-display text-lg font-semibold text-primary">ROSE Engine</span>
+        <span className="mb-4 font-display text-lg font-semibold text-foreground">ROSE Engine</span>
         <span className="px-1 text-xs uppercase tracking-wide text-muted-foreground">Operator</span>
         {operatorSurfaces.map((s) => (
           <Button

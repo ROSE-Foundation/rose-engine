@@ -25,20 +25,20 @@ describe('ThemeProvider', () => {
     window.localStorage.clear();
   });
 
-  it('defaults to light and persists the toggled mode to localStorage', () => {
+  it('defaults to dark and persists the toggled mode to localStorage', () => {
     render(
       <ThemeProvider>
         <Probe />
       </ThemeProvider>,
     );
-    expect(screen.getByTestId('mode')).toHaveTextContent('light');
-    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(screen.getByTestId('mode')).toHaveTextContent('dark');
+    expect(document.documentElement.classList.contains('dark')).toBe(true);
 
     fireEvent.click(screen.getByText('toggle'));
 
-    expect(screen.getByTestId('mode')).toHaveTextContent('dark');
-    expect(document.documentElement.classList.contains('dark')).toBe(true);
-    expect(window.localStorage.getItem('rose-theme')).toBe('dark');
+    expect(screen.getByTestId('mode')).toHaveTextContent('light');
+    expect(document.documentElement.classList.contains('dark')).toBe(false);
+    expect(window.localStorage.getItem('rose-theme')).toBe('light');
   });
 
   it('reads a previously persisted mode on mount', () => {

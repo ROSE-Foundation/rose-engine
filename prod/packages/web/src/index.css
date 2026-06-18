@@ -1,61 +1,82 @@
 @import 'tailwindcss';
 
 /*
- * ROSE Engine design system (DESIGN.md). shadcn-on-Tailwind: one brand color (rosé) for
- * primary actions / active nav / brand marks ONLY; financial semantic tokens (gain/loss/warn/info)
- * for DATA, always paired with a glyph; `numeric` (tabular mono) for every money/price/qty figure;
- * `display` for titles + the Group-NAV hero. Both light + dark are first-class. Components reference
- * these semantic tokens — NEVER raw hex (UX-DR1).
+ * ROSE Engine design system (mock-faithful — docs/mocks/*.html, supersedes the original DESIGN.md).
+ * Dark instrument-terminal base is the default and the fully-designed mode; light is a secondary
+ * toggle (the mocks are dark-only — no light palette is invented). There is NO single brand color:
+ * the identity is the conic logo mark (long→short→gold) and directional DATA colors
+ * (long/short/gold/blue/purple). Figures render in IBM Plex Mono (tabular), titles in Fraunces,
+ * body in Inter. Components reference these tokens — NEVER raw hex.
  */
 
-/* Class-based dark mode (the persisted light/dark toggle flips `.dark` on <html>). */
+/* Class-based dark mode (the persisted light/dark toggle flips `.dark` on <html>; dark is default). */
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
-  /* Chrome (shadcn-neutral light). */
+  /* Light (secondary, un-mocked) chrome — neutral, rosé-free. */
   --background: #ffffff;
   --foreground: #0a0a0a;
   --card: #ffffff;
   --card-foreground: #0a0a0a;
   --muted: #f4f4f5;
   --muted-foreground: #52525b;
+  --dim: #71717a;
   --border: #e4e4e7;
-  --ring: #b12a66;
+  --border-strong: #d4d4d8;
+  --elevated: #fafafa;
+  --ring: #2bb89e;
 
-  /* Brand — rosé. Primary actions / active nav / brand marks ONLY (never data). */
-  --primary: #b12a66;
+  /* No brand color — `primary` is the elevated neutral (rosé abandoned). */
+  --primary: #1c232e;
   --primary-foreground: #ffffff;
 
-  /* Financial semantics (product-critical, not decorative) — DATA only, always with a glyph. */
-  --gain: #1e8e5a;
-  --loss: #c0392b;
-  --warn: #b7791f;
-  --warn-foreground: #1a1208;
-  --info: #2563eb;
+  /* Directional DATA tokens (mock palette; shared across modes). */
+  --long: #2bb89e;
+  --short: #e0685f;
+  --gold: #d3a64a;
+  --blue: #5b9bd5;
+  --purple: #7a6bc4;
+
+  /* Financial semantic aliases — re-pointed at directional tokens so existing surfaces keep working. */
+  --gain: var(--long);
+  --loss: var(--short);
+  --warn: var(--gold);
+  --warn-foreground: #0c1117;
+  --info: var(--blue);
 }
 
+/* Dark — the mock-faithful default. Exact mock palette (docs/mocks/dashboard.html :root). */
 .dark {
-  --background: #0a0a0a;
-  --foreground: #fafafa;
-  --card: #141417;
-  --card-foreground: #fafafa;
-  --muted: #1f1f23;
-  --muted-foreground: #a1a1aa;
-  --border: #2a2a30;
-  --ring: #e85c97;
+  --background: #0e1218;
+  --foreground: #e9edf2;
+  --card: #161c25;
+  --card-foreground: #e9edf2;
+  --muted: #1c232e;
+  --muted-foreground: #9aa6b4;
+  --dim: #5e6a78;
+  --border: #28313e;
+  --border-strong: #323c4a;
+  --elevated: #222a36;
+  --ring: #2bb89e;
 
-  --primary: #e85c97;
-  --primary-foreground: #1a0e14;
+  --primary: #1c232e;
+  --primary-foreground: #e9edf2;
 
-  --gain: #34d399;
-  --loss: #f87171;
-  --warn: #fbbf24;
-  --warn-foreground: #1a1208;
-  --info: #60a5fa;
+  --long: #2bb89e;
+  --short: #e0685f;
+  --gold: #d3a64a;
+  --blue: #5b9bd5;
+  --purple: #7a6bc4;
+
+  --gain: var(--long);
+  --loss: var(--short);
+  --warn: var(--gold);
+  --warn-foreground: #0c1117;
+  --info: var(--blue);
 }
 
-/* Map the runtime CSS vars into Tailwind's theme so utilities (text-gain, bg-warn, …) follow the
- * light/dark toggle. `inline` keeps the utilities referencing the live var, not a frozen value. */
+/* Map runtime CSS vars into Tailwind's theme so utilities (text-long, bg-short, border-strong, …)
+ * follow the light/dark toggle. `inline` keeps utilities referencing the live var. */
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
@@ -63,30 +84,43 @@
   --color-card-foreground: var(--card-foreground);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
+  --color-dim: var(--dim);
   --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-elevated: var(--elevated);
   --color-ring: var(--ring);
 
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
 
+  /* Directional DATA colors. */
+  --color-long: var(--long);
+  --color-short: var(--short);
+  --color-gold: var(--gold);
+  --color-blue: var(--blue);
+  --color-purple: var(--purple);
+
+  /* Financial semantic aliases. */
   --color-gain: var(--gain);
   --color-loss: var(--loss);
   --color-warn: var(--warn);
   --color-warn-foreground: var(--warn-foreground);
   --color-info: var(--info);
 
-  /* Type roles. `numeric` = tabular mono for all figures; `display` = sober titles + hero KPI. */
+  /* Type roles. `sans` = Inter body; `display` = Fraunces titles; `numeric` = IBM Plex Mono figures. */
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  --font-display: 'Fraunces', ui-serif, Georgia, serif;
   --font-numeric: 'IBM Plex Mono', ui-monospace, 'SFMono-Regular', monospace;
-  --font-display: 'Geist Sans', ui-sans-serif, system-ui, sans-serif;
 
-  /* Crisp, instrument-like radii; pill reserved for status badges. */
-  --radius-sm: 4px;
-  --radius-md: 6px;
-  --radius-lg: 8px;
+  /* Softer, mock-scale radii (mocks use ~12px cards; pill reserved for status badges). */
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
 }
 
 body {
   background-color: var(--background);
   color: var(--foreground);
-  font-family: ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Inter', ui-sans-serif, system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
 }
