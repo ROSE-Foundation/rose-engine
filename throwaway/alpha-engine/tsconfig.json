@@ -1,0 +1,17 @@
+{
+  // THROWAWAY typecheck-only project (Alpha Engine PoC). Deliberately NOT part of the root
+  // tsconfig solution and NOT a pnpm-workspace member — the regime defense is that /prod never
+  // takes a dependency on /throwaway. This package is fully self-contained (Node stdlib only),
+  // so it includes only its own `src`. `noEmit` keeps it typecheck-only, mirroring
+  // @throwaway/simulator.
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "composite": false,
+    "declaration": false,
+    "declarationMap": false,
+    "sourceMap": false
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["node_modules"]
+}
