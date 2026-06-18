@@ -6,6 +6,10 @@ import { ApiClientError } from '../../lib/api-client.js';
 import type { CoupledPairResponse } from '../../lib/contract-types.js';
 import { deriveFloorUnits, distanceToFloor, legsBalance, sumLegs } from '../../lib/pair-math.js';
 import { REFRESH_WINDOW_MS, useCoupledPair } from '../../lib/queries.js';
+import {
+  CoupledCoinsWalkthrough,
+  type WalkthroughParams,
+} from './walkthrough/coupled-coins-walkthrough.js';
 
 /** A raw smallest-units magnitude (the `coupled_pairs` row carries no per-leg scale). Mono, exact. */
 function Units({ value, label }: { value: string; label?: string }): React.JSX.Element {
@@ -114,10 +118,24 @@ export function CoupledPairView({
   );
 }
 
-/** Container: drives `CoupledPairView` from live data with explicit loading/empty/error states. */
-export function CoupledPairSurface({ pairId }: { pairId: string }): React.JSX.Element {
-  const query = useCoupledPair(pairId);
+/** Maps a live pair into the walkthrough's simulation parameters (real, not illustrative). */
+function toWalkthroughParams(pair: CoupledPairResponse): WalkthroughParams {
+  return {
+    referenceAsset: pair.referenceAsset,
+    anchorPrice: pair.anchorPrice,
+    leverage: pair.leverage,
+    collateralPool: pair.collateralPool,
+    floor: pair.floor,
+    illustrative: false,
+  };
+}
 
+/** The live-data section: `CoupledPairView` with explicit loading/empty/error states. */
+function LivePairSection({
+  query,
+}: {
+  query: ReturnType<typeof useCoupledPair>;
+}): React.JSX.Element {
   if (query.isLoading) {
     return <Skeleton className="h-64 w-full" />;
   }
@@ -136,4 +154,21 @@ export function CoupledPairSurface({ pairId }: { pairId: string }): React.JSX.El
     return <p className="text-muted-foreground">No active pairs.</p>;
   }
   return <CoupledPairView pair={query.data} lastUpdated={query.dataUpdatedAt} />;
+}
+
+/**
+ * The Coupled-Pair surface ("the mechanism", mock card 03): the pedagogical coupled-coins
+ * walkthrough — seeded from the live pair when one is available, otherwise an explicitly-illustrative
+ * example — above the live-data `CoupledPairView`.
+ */
+export function CoupledPairSurface({ pairId }: { pairId: string }): React.JSX.Element {
+  const query = useCoupledPair(pairId);
+  const livePair = query.data ? toWalkthroughParams(query.data) : null;
+
+  return (
+    <div className="flex flex-col gap-6">
+      <CoupledCoinsWalkthrough livePair={livePair} />
+      <LivePairSection query={query} />
+    </div>
+  );
 }
