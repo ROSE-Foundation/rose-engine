@@ -2,7 +2,7 @@
 title: ROSE Engine — Product Requirements Document
 status: final
 created: 2026-06-15
-updated: 2026-06-15
+updated: 2026-06-18
 ---
 
 # PRD: ROSE Engine
@@ -24,7 +24,7 @@ The PRD is Glossary-anchored: features are grouped, functional requirements (FR-
 
 ## 1. Vision
 
-Modern finance is digital on the surface and analog underneath. Markets move in milliseconds, but settlement still takes T+2; liquidity sits trapped overnight across fragmented custodians, correspondent banks, and clearing houses. No genuine intraday money market exists. The ROSE Engine exists to make finance **digital underneath** — a real-time infrastructure layer where trading, settlement, interest, and liquidity coordination happen continuously rather than in delayed batches. Its sibling premise is **intrinsic time**: markets measured by meaningful events rather than the wall clock — financial time that slows when markets are calm and accelerates with volatility. The Engine's threshold-only rebalancing (§4.7) is the operational embodiment of that idea: it reacts to price events, never to a clock.
+Modern finance is digital on the surface and analog underneath. Markets move in milliseconds, but settlement still takes T+2; liquidity sits trapped overnight across fragmented custodians, correspondent banks, and clearing houses. No genuine intraday money market exists. The ROSE Engine exists to make finance **digital underneath** — a real-time infrastructure layer where trading, settlement, interest, and liquidity coordination happen continuously rather than in delayed batches. Its sibling premise is **intrinsic time**: markets measured by meaningful events rather than the wall clock — financial time that slows when markets are calm and accelerates with volatility. The Engine's threshold-only rebalancing (§4.7) is the operational embodiment of that idea: it reacts to price events, never to a clock. *(The same intrinsic-time principle is explored at market scale — emergent, event-paced price formation in an agent population — as a separate Throwaway R&D study; see §17.)*
 
 The Engine's structural innovation is the **coupled pair**: financial value issued only in paired long+short form, designed to be **delta-neutral at issuance**, so directional risk comes from strategy rather than from the existence of the instrument. The pair is more than a risk device — it lets collateral **circulate and recycle** through the infrastructure instead of lying dormant, which is the bridge to the intraday-money-market end-state. Packaged into a **Rose Note** and issued from a regulated fund vehicle as **ERC-3643 permissioned security tokens on EVM**, it lets ROSE access significant markets with bounded risk. The Engine is the financial organ that generates the surplus the rest of ROSE depends on — "the first moment at which ROSE must not only make sense, but *work*."
 
@@ -99,6 +99,9 @@ P0 proves the whole loop end-to-end — **live in code, on testnet/paper, with n
 - **Reconciliation** — the process producing the group view and verifying ledger ↔ chain consistency, **correcting the off-chain ledger toward the chain** on token-ownership divergence.
 - **Source of truth** — the **chain** is authoritative for token ownership and positions; the **off-chain ledger** is the authoritative accounting record and is reconciled/corrected to the chain on conflict.
 - **Commons allocation** — the share of ROSE's surplus directed to the common good (Swiss non-profit). Context, not a P0 capability.
+- **Position (synthetic)** — an **off-chain**, per-user directional claim (side L/S, size, entry P₀, collateral, leverage, P&L) over an *issued coupled pair* (§4.8). It is a derived view, not a source of truth, and never an on-chain single leg.
+- **Price oracle** — the substitutable port supplying the reference-asset price to the mark-to-market service (§4.8 / FR-24); a read-only market-data input, never a writer of postings. P0 adapter: CSV/replay or testnet feed.
+- **Mark-to-market** — computing a position's current mark and unrealized P&L from the live reference price and the pair's real parameters (`legsAtPrice` / floor / distance-to-floor).
 - **PROD regime / Throwaway regime** — the two labelled code-quality regimes in one repository. PROD is production-grade; throwaway (model math, simulator) is disposable and never a production dependency.
 
 ---
@@ -258,6 +261,7 @@ The Trading Co. executes strategy in **paper/testnet mode** (no real CEX, no rea
 **Consequences (testable):**
 - A strategy execution produces ledger entries tagged to the executing entity; simulated P&L accrues to the VCC via its ownership chain and is visible in the group view.
 - P0 execution is paper/testnet and small-scale; real-venue and high-frequency scale-up are post-MVP (NFR-7, §17).
+- The per-holder *directional* view of this exposure (entry/mark/P&L) is provided by the secondary-trading position layer (§4.8, FR-23–FR-27), not by this execution path itself.
 
 ---
 
@@ -272,6 +276,7 @@ The system provides functional Covenant Console, Coupled-Pair, Exchange/Trading,
 **Consequences (testable):**
 - Each surface renders live data (no hard-coded mockup surfaces in P0).
 - The Subscriber surfaces drive the live subscription/redemption flow (FR-11); the Coupled-Pair view reflects live pair state (FR-6); the Covenant Console reflects the live group view (FR-9).
+- The **Exchange / Trading** surface renders live per-user positions and marks via the secondary-trading position layer (§4.8, FR-23–FR-27); absent an oracle feed it shows the documented "no price feed" empty-state (FR-24, FR-26).
 
 ---
 
@@ -280,6 +285,8 @@ The system provides functional Covenant Console, Coupled-Pair, Exchange/Trading,
 **Description:** A **throwaway** mathematical library and rebalancing simulator that **refutes or confirms** the coupled-coin model cheaply, before production weight rests on it. In-memory, no database, no auth. The library implements the reference mechanics (leg values vs price; the issuer-neutral invariant that leg values sum to K within the barrier; the floor as `m·L·g`). The simulator replays historical ticks and rebalances **by threshold only** — a reset fires *only* when a losing leg breaches the floor, **never on a clock** (clock-based rebalancing would import leveraged-ETF volatility decay — the trap to avoid; this is "intrinsic time" in operation). *(Throwaway regime. Math reference → `addendum.md`.)*
 
 > **What this validates and what it does not.** The simulator proves the **invariant** `V_A+V_B=K` holds within the barrier and that no leg goes negative — i.e. the model is *issuer-neutral* (issuer net = 0). *Who* bears the locked loss at a reset (D1: the losing-leg holder, separate L/S) and *what becomes of the locked P&L* (D1a: crystallised & withdrawable, both legs re-base symmetric) are now both settled — though the simulator itself only proves the invariant, not the loss-allocation. Issuer-neutrality is **conditional**: it holds within the barrier and can break on a price gap past the floor — that conditionality is the **key model risk** (§15).
+
+> **Related exploration (Throwaway, not P0).** A separate agent-based study — *The Alpha Engine PoC* (`docs/alpha_engine_poc_v1.pdf`) — probes the **same intrinsic-time thesis at the market level**: an endogenous price emerging from a population of long/short agents whose trades fire by accumulated *carry pressure* (event-paced, never clock-paced), cleared each tick by a Dutch auction. It is **Throwaway R&D**, **disjoint** from the coupled-coin instrument and from P0 (no ledger, no chain, no compliance, floats permitted); `/prod` never depends on it (§11.1). It does **not** validate or advance any P0 requirement. See `_bmad-output/implementation-artifacts/gap-analysis-alpha-engine-poc-2026-06-18.md`.
 
 **Functional Requirements:**
 
@@ -306,10 +313,54 @@ Over a tick set, the simulator demonstrates no leg goes negative and journals ev
 
 ---
 
+### 4.8 Secondary-Trading Position Layer (off-chain, synthetic over issued pairs)
+
+**Description:** An **off-chain synthetic position layer** that gives Subscribers a per-user, directional view of their exposure — entry, mark, P&L — *on top of* the issued coupled pairs, without ever creating a single on-chain leg. It is the product home for the directional per-holder view that D1/D1a imply (§4.2), and it is what makes the **Exchange / Trading** surface (FR-14) functional with live marks. It is **not** a matching engine, CLOB, or AMM venue (§5): positions are **claims/assignments composed from the existing atomic subscribe/mint and redeem/burn flow** (FR-11, FR-18, FR-21). On-chain issuance stays **atomic-pair-only**; the deployed ERC-3643-compatible coupling contracts are **unchanged** (no new compliance rule, no re-audit). The chain and ledger remain the source of accounting/ownership truth; positions are a **derived layer** over them. *(PROD regime; `/prod` never imports `/throwaway`.)*
+
+> **Origin (sprint change 2026-06-18).** The Exchange-terminal mock (`docs/mocks/exchange.html`) demanded a perp-style *buy-a-naked-leg* flow with live mark/P&L. Honouring it literally would break the atomic-coupling invariant — a single leg is unrepresentable on-chain and off-chain (FR-6, FR-18/FR-19/FR-21). Of four resolutions (A order-book matching; B market-maker/AMM; C off-chain synthetic layer; D redefine contracts for single legs), **Option C — the off-chain synthetic layer — was chosen**: it preserves the invariant, leaves the deployed contracts untouched (no re-audit), and reuses proven patterns (dual-write outbox/saga, reconcile-and-correct, the `postTransfer` chokepoint). **Single-leg trading is explicitly not built** and stays impossible everywhere. Any future need to alter on-chain coupling re-opens this resolution (toward Option D) with a fresh audit and explicit product-safety sign-off. *(Safety-over-UI: the invariant wins; the terminal is adapted to the model honestly, the model is not bent to the mock.)*
+
+**Functional Requirements:**
+
+#### FR-23: Persist an off-chain per-user position model
+The system stores a position as `(owner, reference asset, side L/S, size/units, entry = anchor P₀, collateral, leverage, realized + unrealized P&L, lifecycle, link to the issued coupled pair)`. Positions are **off-chain**; they never mint or hold a single on-chain leg.
+**Consequences (testable):**
+- A position always references an issued coupled pair; **no single-leg on-chain artifact is created**.
+- The schema carries a **`leverage` field, but P0 forces it to 1x** — the field is modelled for forward extensibility; leveraged positions (>1x) are post-P0 (§17). The terminal's leverage selector renders a disabled / fixed-1x state in P0. *(A test asserts a position with leverage ≠ 1 is rejected in P0.)*
+- The position `lifecycle` states are explicit: `OPEN → (RESET) → CLOSED` — where **`RESET` is the D1/D1a settlement boundary** of the underlying pair (§4.2): on reset the position's `entry` re-anchors to the new P₀, its unrealized P&L **crystallises to realized/withdrawable**, and it re-bases with the pair's fresh symmetric split (no carried P&L). A position never outlives a `CLOSED` pair.
+- Money fields are integer smallest-units / `NUMERIC`; `entry` is the anchor P₀ as `decimal(18,8)` (NFR-2).
+
+#### FR-24: Price-oracle port + mark-to-market service
+A **substitutable** oracle port supplies the reference-asset price; a mark service computes entry/mark/unrealized P&L from real pair parameters (`legsAtPrice` / floor / distance-to-floor). The oracle port is **in P0**, with the **P0 adapter = CSV/replay or a testnet feed** (no live OANDA/LMAX, §14). The oracle is a **read-only market-data input — never a writer of postings**.
+**Consequences (testable):**
+- Swapping the oracle adapter changes no caller (NFR-8).
+- An absent feed yields an explicit "no price feed" state — marks are **never fabricated**.
+- The mark carries **price provenance and a freshness/staleness bound**: a price older than the bound yields an explicit **stale-mark** state (not a silently-stale P&L), and the mark price is reconcilable with the pair's own anchor/params so an oracle figure that diverges implausibly is flagged rather than trusted. *(Oracle integrity is a named trust input — §15.)*
+
+#### FR-25: Open / close a position composing the atomic subscribe/redeem pair flow
+Opening a position acquires/assigns exposure against an **atomically issued coupled package** (the real FR-11/FR-18 subscribe + mint path); closing routes the real redeem/burn path (FR-21). The atomic-coupling invariant is preserved; no single-leg mint/burn occurs.
+**Consequences (testable):**
+- Every open/close drives a **paired (both-or-neither) on-chain action**; a single-leg path is impossible.
+- An **independent close of one side** (when the opposite leg is held by another user — the D1 topology) **does not** force a whole-package burn of the other holder's leg: it resolves through the chosen counterparty/inventory model (re-assignment or house, §8 Q8 / §11.4), and the on-chain package is burned only when both sides are released. *(Until the counterparty model is chosen, this path is gated by the §11.4 solvency guardrail.)*
+
+#### FR-26: Position P&L API + Exchange-terminal wiring
+Typed REST endpoints expose per-user positions and live P&L (money as **decimal strings at the API boundary** — serialization only; storage/compute stay integer-smallest-unit / `NUMERIC` per NFR-2); the Exchange / Trading surface (FR-14) renders **live positions + marks**, replacing the price-feed empty-states shipped earlier.
+**Consequences (testable):**
+- The terminal shows live mark/P&L when the oracle is connected, and the documented empty-state when it is not.
+
+#### FR-27: Position ↔ pair reconciliation (chain authoritative for the underlying pairs)
+Reconciliation verifies a **per-pair, per-side residual-backing invariant**: for each issued coupled pair and each side (L/S), the aggregate off-chain position exposure **never exceeds the residual collateral backing of that pair/side** (the residual pool after any D1a reset/withdrawal — *not* gross issued notional netted across pairs or sides). Divergence is reported and corrected toward the chain-backed pair state (reusing the FR-10 pattern).
+**Consequences (testable):**
+- The invariant is checked **per pair and per side** and against the **residual** pool; a deliberately introduced over-exposure on one pair/side is **not masked** by headroom on another.
+- A deliberately introduced position↔pair mismatch is **reported and corrected** toward the chain.
+- Because "correct toward chain" can reduce or void a user's recorded claim, a correction that touches a user position is **journaled and surfaced** (auditable, NFR-3) — it is never a silent liquidation.
+
+---
+
 ## 5. Non-Goals (Explicit)
 
 - **No self-service KYC / onboarding funnel.** Eligibility is a curated allowlist (ERC-3643 claims) gated on completed **off-chain** KYC/AML/accreditation for sophisticated clients; ROSE does not build a public KYC product in P0.
 - **No general multi-asset trading venue.** P0 validates the model on EUR/USD and BTC only; not a matching engine / CLOB / open exchange.
+- **The secondary-trading position layer (§4.8) is not a venue.** It is an **off-chain synthetic layer over issued atomic pairs** — *not* a matching engine, CLOB, or AMM (the "no general trading venue" non-goal above stands). On-chain issuance remains atomic-pair-only; the deployed coupling contracts are unchanged. A **real-capital / real-venue secondary market is out of P0** (board-gated, §11.3), as are **leveraged positions (>1x)** — the `leverage` field is modelled but pinned to 1x in P0 (FR-23).
 - **No invented values for parked parameters** (Note coupon, use-of-proceeds split, conversion-to-participation, backing-float floor, model floor params m and g). Read from config; **refuse** when absent.
 - **The Engine is not the whole ROSE system.** Money System currencies, EDIN, Living Movement, Governance tooling, the Commons hardware lab — out of scope.
 - **Not an upgrade of the Laplace platform.** Greenfield; Laplace is precedent only.
@@ -330,6 +381,7 @@ P0 is a **live, small-scale vertical slice** proving the whole loop on the off-c
 - **Live (testnet/paper)** Rose Note subscription/redemption, **paired ERC-3643 mint + burn on Sepolia**, transfer-agent powers, and **small-scale paper execution** (§4.5).
 - ERC-3643 identity/eligibility infrastructure: ONCHAINID registry, trusted claim issuer, compliance rules, curated allowlist gated on off-chain KYC/AML (§4.3/§4.5).
 - All four Engine surfaces functional (§4.6).
+- **Off-chain secondary-trading position layer** (§4.8): per-user position model (leverage modelled, **pinned to 1x**), price-oracle port + mark-to-market service (**CSV/testnet adapter**), open/close composing the atomic subscribe/redeem flow, position P&L API, Exchange-terminal wiring, and position↔pair reconciliation. No on-chain change, no re-audit.
 - Throwaway coupled-coin library + threshold-only simulator on EUR/USD and BTC at L=1 (§4.7).
 - Versioned, reversible migrations from the first commit; invariant tests before application logic.
 
@@ -339,6 +391,9 @@ P0 is a **live, small-scale vertical slice** proving the whole loop on the off-c
 - **Real-capital / mainnet operation** — *Sepolia + paper only; real funds/venues are post-P0, board-gated*.
 - Cross-jurisdiction (Cayman) reconciliation — *deferred*.
 - High-frequency / large-scale execution — *perf hot paths planned (Rust/Go) but not scaled*.
+- **Real-capital / real-venue secondary market** — *the §4.8 position layer runs testnet/paper only; a real secondary market is board-gated (§11.3)*.
+- **Leveraged positions (>1x)** — *the `leverage` field exists but is pinned to 1x in P0; leverage is post-P0*.
+- **On-chain single-leg trading or any contract redefinition** — *Option C is off-chain only; altering on-chain coupling re-opens the resolution decision with a fresh audit*.
 - `[NOTE FOR PM: resolving any parked parameter — these stay unset by decision, not omission.]`
 
 ## 7. Success Metrics
@@ -349,7 +404,7 @@ P0 is a **live, small-scale vertical slice** proving the whole loop on the off-c
 - **SM-3: Full lifecycle traversed.** A coupled pair is driven through the complete lifecycle (`PENDING → … → CLOSED`) with every reset correctly journaled, on real ticks. Validates FR-4, FR-16, FR-17.
 
 **Secondary**
-- **SM-4: Spine + compliance integrity proven by test.** All P0 acceptance criteria pass — DB rejection of unbalanced entries, default-deny authorization, on-chain compliance rejection, provider substitutability, ledger↔chain reconcile-and-correct. Validates FR-3, FR-5, FR-7, FR-8, FR-10, FR-19.
+- **SM-4: Spine + compliance integrity proven by test.** All P0 acceptance criteria pass — DB rejection of unbalanced entries, default-deny authorization, on-chain compliance rejection, provider substitutability, ledger↔chain reconcile-and-correct, **and position↔pair residual-backing reconcile-and-correct (FR-27)**. Validates FR-3, FR-5, FR-7, FR-8, FR-10, FR-19, FR-27.
 
 **Counter-metrics (do not optimize)**
 - **SM-C1: EUR/USD reset frequency must stay near zero with a *plausible* floor.** Falsifiability rule: pick `m` and `g` by a **stated, defensible method** (e.g. `g` = empirical worst gap over the reaction window in the tick history; `m` a fixed margin documented in advance), *then* observe the reset rate — do not tune `m`/`g` to manufacture a low rate after the fact. If EUR/USD at L=1 needs an implausibly large `m` to avoid frequent resets, the model/parameters fail. **Does not apply to BTC** (resets expected). Counterbalances SM-3.
@@ -364,6 +419,7 @@ P0 is a **live, small-scale vertical slice** proving the whole loop on the off-c
 5. **Single-source rule equivalence** — the mechanism keeping off-chain `flow_permissions` and on-chain compliance rules provably equivalent (FR-19).
 6. **Reconciliation cadence & chain finality** — on-demand vs scheduled vs per-event; reorg/finality handling (FR-10).
 7. **Floor-parameter method** — the defensible method for choosing `m` and `g` that makes SM-C1 falsifiable.
+8. **⚠️ Position counterparty / inventory model (§4.8) — BLOCKING solvency decision, not a mechanism detail.** Under D1 (L and S held *separately* by different holders), the question "who holds the opposite leg, and what happens on an independent close" is a **solvency-model choice**, not an architecture nicety: a **matched book** (P2P; ROSE holds no inventory; close requires re-assignment to a new counterparty — Option A topology) versus **house inventory** (ROSE/Trading Co. holds the opposite leg and carries directional risk hedged via FR-20 — Option B topology). It also governs whether an independent single-position close is even reconcilable with the whole-package atomic burn (FR-21/FR-25). **Decision deferred to architecture + board, but bounded** (§11.4): until resolved and shown solvency-preserving, the position-layer solvency guardrail binds, and the model **must be chosen before Epic 8 build**. (Raised 2026-06-18 by domain-finance review; supersedes the earlier "for architecture, mechanism detail" framing.)
 
 ## 9. Assumptions Index
 
@@ -376,6 +432,8 @@ P0 is a **live, small-scale vertical slice** proving the whole loop on the off-c
 - §14 — degree of P0 `laplace.digital` marketplace integration.
 
 *Resolved during review (now firm — see `.decision-log.md`):* P0 = live testnet/paper slice (Sepolia + paper); tokens via custom ERC-3643-compatible contract (OpenZeppelin) on EVM; chain = source of truth, ledger corrected to chain; off-chain ledger = accounting record; SPEC superseded; BTC at L=1 stress test; L per-pair; hybrid value+quantity ledger; integers + BigInt/NUMERIC; SM-1 no target; minimal roadmap; TypeScript default + Rust/Go hot paths; KYC self-service out, ERC-3643 identity infra in; all surfaces functional.
+
+*Resolved 2026-06-18 (sprint change — secondary-trading position layer, §4.8):* Option C (off-chain synthetic layer) chosen over order-book / AMM / contract-redefinition; atomic-coupling invariant and deployed contracts unchanged (no re-audit); **leverage modelled but pinned to 1x in P0**; **price-oracle port in P0 with CSV/testnet adapter** (no live feed). Open: position claim/assignment semantics → architecture (§8 Q8).
 
 ---
 
@@ -402,6 +460,12 @@ Unset by decision; read from config; absence → explicit refusal, never a defau
 ### 11.3 Sequencing & no-accidental-real-money guardrail
 - No component that touches real client money or real backing advances until the corresponding invariant is proven in software. **P0 touches no real money** — Sepolia testnet + paper execution by design. Because the testnet/paper boundary is a **runtime/config switch** rather than an absent feature, the code must not create a path by which real-money operation becomes possible by accident: switching to real capital/mainnet must be an explicit, gated, reviewed change, not a config flip — and the off-chain ledger + on-chain compliance must both be in force first.
 
+### 11.4 Position-layer solvency guardrail (§4.8)
+- The secondary-trading position layer is **solvency-bound, not just invariant-bound**. Preserving the on-chain atomic-coupling invariant (no single on-chain leg) is necessary but **not sufficient**: an off-chain synthetic layer can still promise *economic* exposure the issued pairs do not back. Therefore:
+  - **No synthetic position may leave an issued leg unbacked or synthesize naked single-leg exposure.** Every open/close must preserve **per-pair, per-side** solvency against the **residual collateral pool** (i.e. after any D1a reset/withdrawal), not merely against gross *issued* notional.
+  - The **counterparty / inventory model** (matched book vs house inventory — §8 Q8) is a **blocking decision** that must be chosen and shown solvency-preserving **before Epic 8 build**. Until then this guardrail, plus FR-27, is the binding safety floor.
+  - The **Lykke exchange-collapse failure modes** (custody, solvency, run risk — §15) are a **named review input** for this layer, not a footnote.
+
 ## 12. Regulatory, Legal & Jurisdictional
 
 *Context that bounds the Engine. **P0 itself runs on Sepolia testnet + paper execution with no real capital**, so live regulatory exposure is deferred; the structure below is what the Engine is built toward for the post-P0 real-capital step.*
@@ -413,6 +477,7 @@ Unset by decision; read from config; absence → explicit refusal, never a defau
 - **Client-collateral segregation:** the **Model-A bright line**, enforced **off-chain (FR-8) and on-chain (FR-19)**.
 - **Surplus / non-profit:** ROSE operates through a **Swiss non-profit**; surplus is partly directed to commons. *(Context.)*
 - `[ASSUMPTION: specific securities-law / marketing-restriction / "sophisticated client" eligibility rules for `laplace.digital` distribution are for legal counsel (e.g. AUSIA); they shape the allowlist/claim criteria. Out of P0 build scope.]`
+- **Derivative/CFD framing of the secondary-trading position layer (§4.8) — flag for counsel.** A per-user *directional* synthetic position with entry/mark/live P&L, max-loss, a (post-P0) leverage selector, and withdrawable cash at reset is economically **CFD/derivative-like**, even off-chain and even on testnet/paper. This may change the regulatory characterization of the offering (vs. holding a tokenised note). `[ASSUMPTION: whether the position layer constitutes a regulated derivative/CFD product — and any resulting licensing, disclosure, or eligibility constraints — is for legal counsel; surfaced here so it is not discovered late. Does not block the testnet/paper P0 build, but gates any real-capital secondary market (§11.3/§11.4).]`
 
 ## 13. Capital Structure & Commons (context)
 
@@ -427,6 +492,7 @@ Unset by decision; read from config; absence → explicit refusal, never a defau
 - **Distribution surface** — eligible Subscribers reach Rose Notes via `laplace.digital`. `[ASSUMPTION: degree of P0 marketplace integration TBD.]`
 - **Trading venue** — P0 execution is **paper/testnet** (no real CEX/DEX integration); real venues are post-P0.
 - **Price data** — historical tick files (CSV) for validation; no live OANDA/LMAX feed in P0.
+- **Price-oracle port (§4.8 / FR-24)** — a **substitutable** reference-price port feeding the mark-to-market service; **in P0** with a **CSV/replay or testnet adapter** (consistent with "no live feed in P0" above). A read-only market-data input, never a writer of postings; a real (live) feed is post-P0, board-gated (§11.3).
 
 ## 15. Risk & Mitigations
 
@@ -437,6 +503,9 @@ Unset by decision; read from config; absence → explicit refusal, never a defau
 - **Ledger ↔ chain drift / dual-write failure.** *Mitigation:* chain authoritative; outbox/saga with on-chain commit point; reconcile-and-correct backstop (FR-10, NFR-9).
 - **Regime leakage / accidental real-money path.** *Mitigation:* CI dependency rule (§11.1); explicit gated switch to mainnet (§11.3).
 - **Silent-default risk.** *Mitigation:* refuse-on-absent for all parked params incl. m/g (NFR-4, §11.2).
+- **Synthetic-exposure / solvency risk (§4.8) — preserving the on-chain invariant is necessary but not sufficient.** An off-chain position layer can promise *economic* exposure the issued pairs do not back even while every on-chain leg stays atomically paired. *Mitigation:* the **per-pair, per-side residual-backing invariant** (FR-27) — checked against the residual pool after D1a reset, never netted across pairs/sides; the **§11.4 solvency guardrail**; and the **blocking counterparty/inventory decision** (§8 Q8) that must be chosen and shown solvency-preserving before Epic 8 build. The **Lykke exchange-collapse failure modes (custody, solvency, run risk) are a named review input** for this layer before any real-capital secondary market.
+- **Oracle risk (new trust input, §4.8).** A price oracle is a new external dependency the mark/P&L depend on. *Mitigation:* isolate behind a substitutable port (FR-24, NFR-8); keep P0 on CSV/testnet (no live feed); absent feed yields an explicit empty-state, never fabricated marks; the oracle never writes postings.
+- **Position-layer scope creep into a real venue.** *Mitigation:* §4.8 is explicitly bounded — synthetic, off-chain, not a matching engine/CLOB/AMM (§5); real secondary market is board-gated (§11.3).
 - **Scope/feasibility risk of a wide P0.** *Mitigation:* testnet/paper removes the hardest hardening; the slice is "sufficient precision," not maximal elaboration (§1, §6).
 
 ## 16. Stakeholders & Approvals — and Audit Trail
@@ -453,6 +522,7 @@ Unset by decision; read from config; absence → explicit refusal, never a defau
 
 - **P0 — the MVP (this PRD):** off-chain ledger spine + coupled-pair contract + dual off-chain/on-chain authorization + reconciliation (correcting to chain) + **live small-scale subscription/execution/ERC-3643 mint+burn on Sepolia + paper execution** + model validation. Prove the whole loop and the model, with no real capital.
 - **Beyond P0 (directions, not commitments):** resolve D1 (instrument design); move to **real capital / mainnet / real venues** (board-gated); **Intraday Money Market** as the intended productization target ("the first step to a global liquidity pool") that the P0 slice precedes; execution scale-up (Rust/Go hot paths) and volume; multi-pair / multi-asset; cross-jurisdiction (e.g. Cayman) reconciliation; broader Subscriber surfaces. **To be formalized in a dedicated roadmap.**
+- **Intrinsic-time research thread (Throwaway R&D, not a product commitment):** the *Alpha Engine PoC* (agent-based emergent price formation via Dutch auction; `docs/alpha_engine_poc_v1.pdf`) validates the **intrinsic-time / complexity-science premise** (§1) at the **market level** — complementary to §4.7's instrument-level validation. R&D only; **disjoint from P0**; a future link (its emergent `p_int` feeding the coupled-coin model, or to the Intraday Money Market end-state) is **undecided**. Gap analysis: `_bmad-output/implementation-artifacts/gap-analysis-alpha-engine-poc-2026-06-18.md`.
 
 ## 18. Why Now
 
@@ -473,3 +543,9 @@ Settlement still takes T+2 while markets move in milliseconds; no intraday money
 - [ ] Substituting a fake `AuthorizationProvider` requires no change to calling code (test). *(FR-5)*
 - [ ] A subscription drives the full loop end-to-end on testnet/paper at small scale (demonstration). *(FR-11, SM-1)*
 - [ ] The simulator shows V_A+V_B=K within the barrier and no negative leg over a EUR/USD tick set, flags any floor-gap breach, and exercises the full lifecycle (test). *(FR-15, FR-17)*
+- [ ] Opening and closing a position each drive a paired (both-or-neither) on-chain action; no single-leg mint/burn path exists (test). *(FR-25)*
+- [ ] A position created with leverage ≠ 1 is rejected in P0 (test). *(FR-23)*
+- [ ] At a pair reset, an open position re-anchors `entry` to the new P₀ and crystallises its unrealized P&L to realized/withdrawable, with a balanced settlement entry (test). *(FR-23, §4.2 D1a)*
+- [ ] Swapping the oracle adapter requires no caller change; an absent feed yields a "no price feed" state and a price past the staleness bound yields a "stale-mark" state — neither fabricates a mark (test). *(FR-24)*
+- [ ] The Exchange terminal renders live per-user positions + marks when the oracle is connected, and the documented empty-state when it is not (demonstration). *(FR-26)*
+- [ ] A deliberately introduced over-exposure on one pair/side is reported and corrected toward the chain **and is not masked by headroom on another pair/side**; a correction touching a user position is journaled, never silent (test). *(FR-27)*
