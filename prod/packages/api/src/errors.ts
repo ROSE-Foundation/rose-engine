@@ -104,6 +104,10 @@ const ERROR_REGISTRY: Readonly<Record<string, Mapping>> = Object.freeze({
   RedemptionIdempotencyConflictError: { status: 409 },
   StrategyResetIdempotencyConflictError: { status: 409 },
   CoupledPairResetStateError: { status: 409 },
+  // §11.4 solvency guardrail (Story 8.6): the independent single-side close (D1 topology — the
+  // opposite leg held by another user) is fail-closed until the §8 Q8 counterparty/inventory model
+  // lands. A named refusal (UX-DR5), not a silent failure; the message names the guardrail rule.
+  SolvencyGuardrailError: { status: 409, code: 'SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED' },
 
   // ── 503 refuse-if-absent server configuration (a typed refusal, NOT an opaque 500) ──
   ConfigRefusalError: { status: 503 },

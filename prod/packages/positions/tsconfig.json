@@ -1,0 +1,15 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "rootDir": "src",
+    "outDir": "dist"
+  },
+  "references": [
+    { "path": "../ledger" },
+    { "path": "../shared" },
+    { "path": "../chain" },
+    { "path": "../rose-note" }
+  ],
+  "include": ["src/**/*.ts"],
+  "exclude": ["dist", "node_modules"]
+}

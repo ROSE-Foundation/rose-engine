@@ -7,7 +7,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { ApiClientError, type ApiClient } from '../../lib/api-client.js';
 import type { GroupViewResponse } from '../../lib/contract-types.js';
 import { ApiClientProvider } from '../../lib/queries.js';
-import { emptyGroupView, tradingGroupView, tradingLossGroupView } from '../../test/fixtures.js';
+import {
+  emptyGroupView,
+  noFeedPosition,
+  okPosition,
+  positionsResponse,
+  stalePosition,
+  tradingGroupView,
+  tradingLossGroupView,
+} from '../../test/fixtures.js';
 import { ExchangeTrading, ExchangeTradingView } from './exchange-trading.js';
 
 /** A two-market trading view (adds an ETH/USD market + pair) to exercise market selection. */
@@ -57,8 +65,6 @@ describe('ExchangeTradingView (AC-1)', () => {
     expect(screen.getAllByText('TRADING_CO').length).toBeGreaterThan(0);
     // The P&L delta carries a glyph + sign (meaning not on color alone).
     expect(screen.getByText(/▴/)).toBeInTheDocument();
-    // The open pair's lifecycle badge label is shown.
-    expect(screen.getByText('Active')).toBeInTheDocument();
   });
 
   it('shows the empty state when there is no trading activity', () => {
@@ -71,6 +77,45 @@ describe('ExchangeTradingView (AC-1)', () => {
     // The KPI delta shows ▾ −300.00 — never ▾ −-300.00 (the label is the unsigned magnitude).
     expect(screen.getByLabelText('down 300.00')).toBeInTheDocument();
     expect(screen.queryByText(/−-/)).not.toBeInTheDocument();
+  });
+});
+
+describe('Live positions + marks + P&L (Story 8.4, AC-2)', () => {
+  it('renders the live mark price + directional P&L when the oracle is connected (OK)', () => {
+    render(<ExchangeTradingView view={tradingGroupView()} positions={[okPosition()]} />);
+    // The live mark price replaces the "price feed not connected" empty-state (chart-head + Mark cell).
+    expect(screen.getAllByText('63000.00').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText(/live mark/i)).toBeInTheDocument();
+    // The directional P&L renders as a signed glyph delta (never color-only).
+    expect(screen.getByLabelText('up 1500')).toBeInTheDocument();
+    expect(screen.queryByText(/price feed not connected/i)).not.toBeInTheDocument();
+  });
+
+  it('shows the documented "no price feed" state when the oracle is absent — never fabricated', () => {
+    render(<ExchangeTradingView view={tradingGroupView()} positions={[noFeedPosition()]} />);
+    // The position is listed, but its Mark/P&L are the honest no-feed gap (no number).
+    expect(screen.getByText('LONG')).toBeInTheDocument();
+    expect(screen.getAllByText(/no price feed/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/price feed not connected/i)).toBeInTheDocument();
+  });
+
+  it('shows the stale-mark state (price surfaced, P&L untrusted) when the quote is stale', () => {
+    render(<ExchangeTradingView view={tradingGroupView()} positions={[stalePosition()]} />);
+    expect(screen.getAllByText(/stale/i).length).toBeGreaterThan(0);
+    // The stale price is surfaced for transparency…
+    expect(screen.getAllByText('63000.00').length).toBeGreaterThan(0);
+    // …but never a trusted directional P&L (the position's P&L delta is absent).
+    expect(screen.queryByLabelText('up 1500')).not.toBeInTheDocument();
+  });
+
+  it('renders the live positions from the injected client through the container', async () => {
+    const client: Partial<ApiClient> = {
+      getGroupView: () => Promise.resolve(tradingGroupView()),
+      getPositions: () => Promise.resolve(positionsResponse([okPosition()])),
+    };
+    const wrap = withProviders(client);
+    render(wrap(<ExchangeTrading owner={`0x${'a'.repeat(40)}`} />));
+    expect((await screen.findAllByText('63000.00')).length).toBeGreaterThanOrEqual(2);
   });
 });
 

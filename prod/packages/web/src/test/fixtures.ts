@@ -6,6 +6,9 @@ import type {
   GroupViewEntity,
   GroupViewResponse,
   Money,
+  Position,
+  PositionMark,
+  PositionsResponse,
   RedemptionResponse,
   RoseNoteResponse,
   SubscriptionResponse,
@@ -349,4 +352,89 @@ export function pendingRedemption(): RedemptionResponse {
     txHash: '0xpendingburn',
     journalEntryId: null,
   };
+}
+
+// ─── Per-user positions + live marks (Story 8.4) ────────────────────────────────────────────────
+
+/** An `OK` live mark: a connected oracle, a positive directional P&L (the long leg gained). */
+function okMark(): PositionMark {
+  return {
+    status: 'OK',
+    entryPrice: '60000.00',
+    markPrice: '63000.00',
+    floor: '0.6',
+    distanceToFloor: '0.25000000',
+    unrealizedPnl: '1500',
+    floorBreached: false,
+    provenance: { source: 'test-replay', asOf: '2026-06-16T12:00:00.000Z' },
+    ageMs: 1200,
+    freshnessBoundMs: 600000,
+    flags: [],
+  };
+}
+
+/** The honest "no price feed" mark (no oracle composed) — every trusted field null (UX-DR4). */
+function noFeedMark(): PositionMark {
+  return {
+    status: 'NO_FEED',
+    entryPrice: '60000.00',
+    markPrice: null,
+    floor: '0.6',
+    distanceToFloor: null,
+    unrealizedPnl: null,
+    floorBreached: null,
+    provenance: null,
+    ageMs: null,
+    freshnessBoundMs: null,
+    flags: ['NO_FEED'],
+  };
+}
+
+/** A `STALE` mark: the price is surfaced (for transparency) but the trusted P&L is null (UX-DR4). */
+function staleMark(): PositionMark {
+  return {
+    ...noFeedMark(),
+    status: 'STALE',
+    markPrice: '63000.00',
+    flags: ['STALE'],
+  };
+}
+
+function position(side: 'LONG' | 'SHORT', mark: PositionMark, id = 'pos-1'): Position {
+  return {
+    id,
+    coupledPairId: 'pair-1',
+    owner: `0x${'a'.repeat(40)}`,
+    referenceAsset: 'BTC',
+    side,
+    sizeUnits: '10000',
+    entryPrice: '60000.00',
+    collateral: '10000',
+    leverage: '1',
+    realizedPnl: '0',
+    lifecycle: 'OPEN',
+    createdAt: '2026-06-16T10:00:00.000Z',
+    updatedAt: '2026-06-16T12:00:00.000Z',
+    mark,
+  };
+}
+
+/** A LONG BTC position with a live OK mark + positive directional P&L. */
+export function okPosition(): Position {
+  return position('LONG', okMark());
+}
+
+/** A position whose mark is the honest "no price feed" state. */
+export function noFeedPosition(): Position {
+  return position('LONG', noFeedMark());
+}
+
+/** A position whose mark is STALE (price surfaced, P&L untrusted). */
+export function stalePosition(): Position {
+  return position('LONG', staleMark());
+}
+
+/** A `GET /positions` listing for the demo owner. */
+export function positionsResponse(positions: Position[] = [okPosition()]): PositionsResponse {
+  return { owner: `0x${'a'.repeat(40)}`, positions };
 }

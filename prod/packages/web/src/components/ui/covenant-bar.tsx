@@ -3,7 +3,10 @@ import type { Covenant } from '../../lib/contract-types.js';
 
 // Each covenant status maps to a semantic token + glyph + label — color-mapped but NEVER color-only
 // (UX-DR8): the glyph and label carry the meaning for AA / colorblind readers.
-const STATUS_STYLE: Record<Covenant['status'], { text: string; bar: string; glyph: string; label: string }> = {
+const STATUS_STYLE: Record<
+  Covenant['status'],
+  { text: string; bar: string; glyph: string; label: string }
+> = {
   PASS: { text: 'text-gain', bar: 'bg-gain', glyph: '✓', label: 'Pass' },
   WATCH: { text: 'text-warn', bar: 'bg-warn', glyph: '◑', label: 'Watch' },
   BREACH: { text: 'text-loss', bar: 'bg-loss', glyph: '✕', label: 'Breach' },

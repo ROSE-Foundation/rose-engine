@@ -131,7 +131,10 @@ function Bar({
           />
         )}
         <div
-          className={cn('w-full transition-[height] duration-150 motion-reduce:transition-none', fill)}
+          className={cn(
+            'w-full transition-[height] duration-150 motion-reduce:transition-none',
+            fill,
+          )}
           style={{ height: `${pct}%` }}
         />
       </div>
@@ -166,7 +169,10 @@ function MarkToMarket({ params }: { params: WalkthroughParams }): React.JSX.Elem
           value={fmtUnits(longLeg)}
           pct={legPct(longLeg, k)}
           fill="bg-long"
-          delta={{ text: pctLabel(longLeg, half), tone: longLeg >= half ? 'text-long' : 'text-short' }}
+          delta={{
+            text: pctLabel(longLeg, half),
+            tone: longLeg >= half ? 'text-long' : 'text-short',
+          }}
         />
         <Bar
           label="Collateral · K"
@@ -182,21 +188,32 @@ function MarkToMarket({ params }: { params: WalkthroughParams }): React.JSX.Elem
           value={fmtUnits(shortLeg)}
           pct={legPct(shortLeg, k)}
           fill="bg-short"
-          delta={{ text: pctLabel(shortLeg, half), tone: shortLeg >= half ? 'text-long' : 'text-short' }}
+          delta={{
+            text: pctLabel(shortLeg, half),
+            tone: shortLeg >= half ? 'text-long' : 'text-short',
+          }}
         />
       </div>
       <div className="mt-4 rounded-lg border border-border bg-card p-4">
         <div className="mb-3 flex items-center justify-between">
           <span className="font-numeric text-sm">
             {params.referenceAsset} <b className="font-medium">{price}</b>{' '}
-            <span className={cn('ml-2 text-xs', bps > 0 ? 'text-long' : bps < 0 ? 'text-short' : 'text-dim')}>
+            <span
+              className={cn(
+                'ml-2 text-xs',
+                bps > 0 ? 'text-long' : bps < 0 ? 'text-short' : 'text-dim',
+              )}
+            >
               {movePct}
             </span>
           </span>
           <span className="flex items-center gap-2 font-numeric text-sm text-muted-foreground">
             V<sub>A</sub> + V<sub>B</sub> ={' '}
             <span className={sum === k ? 'text-gold' : 'text-loss'}>{fmtUnits(sum)}</span> = K{' '}
-            <span className="text-gold" aria-label={sum === k ? 'invariant holds' : 'invariant broken'}>
+            <span
+              className="text-gold"
+              aria-label={sum === k ? 'invariant holds' : 'invariant broken'}
+            >
               {sum === k ? '✓' : '✗'}
             </span>
           </span>
@@ -243,7 +260,7 @@ function Rebalancing({ params }: { params: WalkthroughParams }): React.JSX.Eleme
   const floorUnits = deriveFloorUnits(params.collateralPool, demoFloor);
   const lev = Number(demoLev);
   const floorRatio = Number(demoFloor);
-  const floorPct = (floorRatio * 100).toFixed(floorRatio * 100 % 1 === 0 ? 0 : 1);
+  const floorPct = (floorRatio * 100).toFixed((floorRatio * 100) % 1 === 0 ? 0 : 1);
   // The price move (bps) at which the short leg reaches its floor: short = K/2·(1−L·r) = floorUnits
   // ⇒ r = (1 − floorRatio) / L. Illustrative stress magnitude; real legs computed via legsAtPrice.
   const stressBps = lev > 0 ? Math.round(((1 - floorRatio) / lev) * 10000) : 4500;
@@ -252,10 +269,30 @@ function Rebalancing({ params }: { params: WalkthroughParams }): React.JSX.Eleme
     const issuance = legsAtPrice(params.collateralPool, demoLev, demoFloor, 0);
     const stressed = legsAtPrice(params.collateralPool, demoLev, demoFloor, stressBps);
     return [
-      { banner: `L = ${demoLev} · floor at ${floorPct}% · illustrative stress walkthrough`, tone: 'border-border bg-card text-muted-foreground', floor: false, legs: issuance },
-      { banner: `Price +${stressPct}% · short leg at the floor — approaching the barrier`, tone: 'border-short bg-short/10 text-short', floor: true, legs: stressed },
-      { banner: '⚡ Reset fires · dollar values locked · P₀ re-anchored to current price', tone: 'border-gold bg-gold/10 text-gold', floor: true, legs: stressed },
-      { banner: 'After reset · new P₀, both legs regain room · short-leg loss locked', tone: 'border-gold bg-gold/10 text-gold', floor: false, legs: stressed },
+      {
+        banner: `L = ${demoLev} · floor at ${floorPct}% · illustrative stress walkthrough`,
+        tone: 'border-border bg-card text-muted-foreground',
+        floor: false,
+        legs: issuance,
+      },
+      {
+        banner: `Price +${stressPct}% · short leg at the floor — approaching the barrier`,
+        tone: 'border-short bg-short/10 text-short',
+        floor: true,
+        legs: stressed,
+      },
+      {
+        banner: '⚡ Reset fires · dollar values locked · P₀ re-anchored to current price',
+        tone: 'border-gold bg-gold/10 text-gold',
+        floor: true,
+        legs: stressed,
+      },
+      {
+        banner: 'After reset · new P₀, both legs regain room · short-leg loss locked',
+        tone: 'border-gold bg-gold/10 text-gold',
+        floor: false,
+        legs: stressed,
+      },
     ];
   }, [params.collateralPool, demoLev, demoFloor, floorPct, stressBps, stressPct]);
   const clamped = (step < 0 ? 0 : step > 3 ? 3 : step) as 0 | 1 | 2 | 3;
@@ -267,34 +304,64 @@ function Rebalancing({ params }: { params: WalkthroughParams }): React.JSX.Eleme
         {cur.banner}
       </div>
       <div className="mt-4 flex items-end gap-8">
-        <Bar label="Token A · long" dot="bg-long" value={fmtUnits(cur.legs.longLeg)} pct={legPct(cur.legs.longLeg, k)} fill="bg-long" delta={{ text: pctLabel(cur.legs.longLeg, half), tone: 'text-long' }} />
-        <Bar label="Collateral · K" dot="bg-gold" value={fmtUnits(k)} pct={100} fill="bg-gold" delta={{ text: 'unchanged', tone: 'text-gold' }} />
-        <Bar label="Token B · short" dot="bg-short" value={fmtUnits(cur.legs.shortLeg)} pct={legPct(cur.legs.shortLeg, k)} fill="bg-short" delta={{ text: pctLabel(cur.legs.shortLeg, half), tone: 'text-short' }} floorPct={cur.floor ? legPct(floorUnits, k) : undefined} />
+        <Bar
+          label="Token A · long"
+          dot="bg-long"
+          value={fmtUnits(cur.legs.longLeg)}
+          pct={legPct(cur.legs.longLeg, k)}
+          fill="bg-long"
+          delta={{ text: pctLabel(cur.legs.longLeg, half), tone: 'text-long' }}
+        />
+        <Bar
+          label="Collateral · K"
+          dot="bg-gold"
+          value={fmtUnits(k)}
+          pct={100}
+          fill="bg-gold"
+          delta={{ text: 'unchanged', tone: 'text-gold' }}
+        />
+        <Bar
+          label="Token B · short"
+          dot="bg-short"
+          value={fmtUnits(cur.legs.shortLeg)}
+          pct={legPct(cur.legs.shortLeg, k)}
+          fill="bg-short"
+          delta={{ text: pctLabel(cur.legs.shortLeg, half), tone: 'text-short' }}
+          floorPct={cur.floor ? legPct(floorUnits, k) : undefined}
+        />
       </div>
       <div className="mt-4 flex justify-center gap-2" role="group" aria-label="Rebalancing steps">
-        {['① At issuance', `② Price +${stressPct}%`, '③ Reset fires', '④ After reset'].map((label, idx) => (
-          <button
-            key={label}
-            type="button"
-            onClick={() => setStep(idx)}
-            aria-pressed={step === idx}
-            className={cn(
-              'rounded-md border px-3.5 py-1.5 text-xs transition-colors',
-              step === idx
-                ? 'border-gold bg-gold/10 text-gold'
-                : 'border-border bg-card text-muted-foreground hover:border-border-strong hover:text-foreground',
-            )}
-          >
-            {label}
-          </button>
-        ))}
+        {['① At issuance', `② Price +${stressPct}%`, '③ Reset fires', '④ After reset'].map(
+          (label, idx) => (
+            <button
+              key={label}
+              type="button"
+              onClick={() => setStep(idx)}
+              aria-pressed={step === idx}
+              className={cn(
+                'rounded-md border px-3.5 py-1.5 text-xs transition-colors',
+                step === idx
+                  ? 'border-gold bg-gold/10 text-gold'
+                  : 'border-border bg-card text-muted-foreground hover:border-border-strong hover:text-foreground',
+              )}
+            >
+              {label}
+            </button>
+          ),
+        )}
       </div>
     </div>
   );
 }
 
 /** Renders the body for a given scene index. */
-function SceneBody({ index, params }: { index: number; params: WalkthroughParams }): React.JSX.Element {
+function SceneBody({
+  index,
+  params,
+}: {
+  index: number;
+  params: WalkthroughParams;
+}): React.JSX.Element {
   const k = BigInt(params.collateralPool);
   const half = fmtUnits(k / 2n);
   const kUnits = fmtUnits(k);
@@ -302,31 +369,99 @@ function SceneBody({ index, params }: { index: number; params: WalkthroughParams
     case 0:
       return (
         <div className="flex w-full max-w-[960px] flex-col items-stretch gap-3 md:flex-row md:items-center">
-          <FlowNode icon="◉" title="Note holders" lines="Subscribe in fiat or crypto" amount={kUnits} accent="text-blue" />
+          <FlowNode
+            icon="◉"
+            title="Note holders"
+            lines="Subscribe in fiat or crypto"
+            amount={kUnits}
+            accent="text-blue"
+          />
           <Conn active />
-          <FlowNode icon="▤" title="Collateral pool" lines="Cash held by the treasury" amount={`K = ${kUnits}`} accent="text-gold" />
+          <FlowNode
+            icon="▤"
+            title="Collateral pool"
+            lines="Cash held by the treasury"
+            amount={`K = ${kUnits}`}
+            accent="text-gold"
+          />
           <Conn />
-          <FlowNode icon="⊕" title="Coupled pair" lines="Not yet minted" amount="—" accent="text-dim" lit={false} />
+          <FlowNode
+            icon="⊕"
+            title="Coupled pair"
+            lines="Not yet minted"
+            amount="—"
+            accent="text-dim"
+            lit={false}
+          />
         </div>
       );
     case 1:
       return (
         <div className="flex w-full max-w-[960px] flex-col items-stretch gap-3 md:flex-row md:items-center">
-          <FlowNode icon="◉" title="Note holders" lines="Funded" amount={kUnits} accent="text-dim" lit={false} />
+          <FlowNode
+            icon="◉"
+            title="Note holders"
+            lines="Funded"
+            amount={kUnits}
+            accent="text-dim"
+            lit={false}
+          />
           <Conn />
-          <FlowNode icon="▤" title="Collateral pool" lines="Backs both legs" amount={`K = ${kUnits}`} accent="text-gold" />
+          <FlowNode
+            icon="▤"
+            title="Collateral pool"
+            lines="Backs both legs"
+            amount={`K = ${kUnits}`}
+            accent="text-gold"
+          />
           <Conn active />
-          <FlowNode icon="⊕" title="L + S pair" lines={<><span className="text-long">Token A {half}</span><br /><span className="text-short">Token B {half}</span></>} amount={`P₀ = ${params.anchorPrice}`} accent="text-long" />
+          <FlowNode
+            icon="⊕"
+            title="L + S pair"
+            lines={
+              <>
+                <span className="text-long">Token A {half}</span>
+                <br />
+                <span className="text-short">Token B {half}</span>
+              </>
+            }
+            amount={`P₀ = ${params.anchorPrice}`}
+            accent="text-long"
+          />
         </div>
       );
     case 2:
       return (
         <div className="flex w-full max-w-[960px] flex-col items-stretch gap-3 md:flex-row md:items-center">
-          <FlowNode icon="▤" title="Collateral pool" lines="Stays with treasury" amount={`K = ${kUnits}`} accent="text-gold" />
+          <FlowNode
+            icon="▤"
+            title="Collateral pool"
+            lines="Stays with treasury"
+            amount={`K = ${kUnits}`}
+            accent="text-gold"
+          />
           <Conn active />
-          <FlowNode icon="⊕" title="L + S pair" lines={<><span className="text-long">Token A tradeable</span><br /><span className="text-short">Token B tradeable</span></>} amount="listed" accent="text-long" />
+          <FlowNode
+            icon="⊕"
+            title="L + S pair"
+            lines={
+              <>
+                <span className="text-long">Token A tradeable</span>
+                <br />
+                <span className="text-short">Token B tradeable</span>
+              </>
+            }
+            amount="listed"
+            accent="text-long"
+          />
           <Conn active />
-          <FlowNode icon="⇄" title="Exchange" lines="Bulls buy A · bears buy B" amount="open market" accent="text-blue" />
+          <FlowNode
+            icon="⇄"
+            title="Exchange"
+            lines="Bulls buy A · bears buy B"
+            amount="open market"
+            accent="text-blue"
+          />
         </div>
       );
     case 3:
@@ -336,24 +471,40 @@ function SceneBody({ index, params }: { index: number; params: WalkthroughParams
         <div className="w-full max-w-[820px]">
           <div className="mb-4 flex flex-col gap-4 md:flex-row">
             <div className="flex-1 rounded-lg border border-border bg-card p-5">
-              <div className="mb-2 font-numeric text-xs uppercase tracking-wide text-long">Token A holder</div>
-              <p className="text-sm leading-relaxed text-muted-foreground">Gains when price rises, loses when it falls. Known maximum loss — floors at the threshold, never goes into debt.</p>
+              <div className="mb-2 font-numeric text-xs uppercase tracking-wide text-long">
+                Token A holder
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                Gains when price rises, loses when it falls. Known maximum loss — floors at the
+                threshold, never goes into debt.
+              </p>
             </div>
             <div className="flex-1 rounded-lg border border-border bg-card p-5">
-              <div className="mb-2 font-numeric text-xs uppercase tracking-wide text-short">Token B holder</div>
-              <p className="text-sm leading-relaxed text-muted-foreground">The mirror. Gains when price falls. Same protections. Their gain is exactly the A holder&apos;s loss, and vice versa.</p>
+              <div className="mb-2 font-numeric text-xs uppercase tracking-wide text-short">
+                Token B holder
+              </div>
+              <p className="text-sm leading-relaxed text-muted-foreground">
+                The mirror. Gains when price falls. Same protections. Their gain is exactly the A
+                holder&apos;s loss, and vice versa.
+              </p>
             </div>
           </div>
           <div className="rounded-lg border border-gold/35 bg-gold/5 px-6 py-5 text-center">
             <div className="font-display text-2xl font-medium">
-              <span className="text-long">V<sub>A</sub></span>
+              <span className="text-long">
+                V<sub>A</sub>
+              </span>
               <span className="text-muted-foreground"> + </span>
-              <span className="text-short">V<sub>B</sub></span>
+              <span className="text-short">
+                V<sub>B</sub>
+              </span>
               <span className="text-muted-foreground"> = </span>
               <span className="text-gold">K</span>
               <span className="ml-2 text-base text-dim">at every price</span>
             </div>
-            <div className="mt-2.5 font-numeric text-sm text-muted-foreground">issuer net exposure = 0 · collateral never impaired</div>
+            <div className="mt-2.5 font-numeric text-sm text-muted-foreground">
+              issuer net exposure = 0 · collateral never impaired
+            </div>
           </div>
         </div>
       );
@@ -364,7 +515,14 @@ function SceneBody({ index, params }: { index: number; params: WalkthroughParams
   }
 }
 
-const EYEBROWS = ['Step one · capital', 'Step two · issuance', 'Step three · the venue', 'Step four · mark-to-market', 'The point', 'Edge case · leverage & rebalancing'];
+const EYEBROWS = [
+  'Step one · capital',
+  'Step two · issuance',
+  'Step three · the venue',
+  'Step four · mark-to-market',
+  'The point',
+  'Edge case · leverage & rebalancing',
+];
 const LEDES = [
   'Capital raised through the Rose Note flows into a single cash collateral pool. Nothing has been bought yet — this is pure, liquid backing capital.',
   'Against the reference price P₀, the treasury mints one long token and one short token of equal value. The pool backs both — never one leg without the other.',
@@ -463,7 +621,9 @@ export function CoupledCoinsWalkthrough({
               aria-pressed={playing}
               className={cn(
                 'flex items-center gap-2 rounded-full border px-3 py-1 text-xs transition-colors',
-                playing ? 'border-long text-long' : 'border-border text-muted-foreground hover:border-border-strong',
+                playing
+                  ? 'border-long text-long'
+                  : 'border-border text-muted-foreground hover:border-border-strong',
               )}
             >
               <span aria-hidden>{playing ? '❚❚' : '▶'}</span>
@@ -501,9 +661,15 @@ export function CoupledCoinsWalkthrough({
         aria-live="polite"
         aria-label={`Scene ${index + 1} of ${SCENE_COUNT}: ${SCENE_TITLES[index]}`}
       >
-        <div className="font-numeric text-xs uppercase tracking-[0.25em] text-blue">{EYEBROWS[index]}</div>
-        <h3 className="mt-2.5 font-display text-2xl font-medium leading-tight">{SCENE_TITLES[index]}</h3>
-        <p className="mt-2 max-w-[700px] text-sm leading-relaxed text-muted-foreground">{LEDES[index]}</p>
+        <div className="font-numeric text-xs uppercase tracking-[0.25em] text-blue">
+          {EYEBROWS[index]}
+        </div>
+        <h3 className="mt-2.5 font-display text-2xl font-medium leading-tight">
+          {SCENE_TITLES[index]}
+        </h3>
+        <p className="mt-2 max-w-[700px] text-sm leading-relaxed text-muted-foreground">
+          {LEDES[index]}
+        </p>
         <div className="mt-6 flex items-center justify-center">
           <SceneBody index={index} params={params} />
         </div>
@@ -511,9 +677,23 @@ export function CoupledCoinsWalkthrough({
 
       <div className="mt-6 flex items-center justify-between">
         <span className="text-xs text-dim">
-          Use <kbd className="rounded border border-border px-1.5 py-0.5 font-numeric text-[11px]">←</kbd>{' '}
-          <kbd className="rounded border border-border px-1.5 py-0.5 font-numeric text-[11px]">→</kbd>
-          {!reduced && <> · <kbd className="rounded border border-border px-1.5 py-0.5 font-numeric text-[11px]">space</kbd> toggles play</>}
+          Use{' '}
+          <kbd className="rounded border border-border px-1.5 py-0.5 font-numeric text-[11px]">
+            ←
+          </kbd>{' '}
+          <kbd className="rounded border border-border px-1.5 py-0.5 font-numeric text-[11px]">
+            →
+          </kbd>
+          {!reduced && (
+            <>
+              {' '}
+              ·{' '}
+              <kbd className="rounded border border-border px-1.5 py-0.5 font-numeric text-[11px]">
+                space
+              </kbd>{' '}
+              toggles play
+            </>
+          )}
         </span>
         <div className="flex gap-2.5">
           <button

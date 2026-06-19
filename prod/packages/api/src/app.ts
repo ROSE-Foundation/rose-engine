@@ -7,6 +7,7 @@
 // is the boundary the live write paths (Stories 6.2→6.6) branch onto.
 import fastifySwagger from '@fastify/swagger';
 import type { RoseDb } from '@rose/ledger';
+import type { PriceOracle } from '@rose/price-oracle';
 import type { ChainSupplySnapshot, CovenantThresholds } from '@rose/reconcile';
 import type { RedemptionService, StrategyExecutor, SubscriptionService } from '@rose/rose-note';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
@@ -22,6 +23,7 @@ import { coupledPairRoutes } from './routes/coupled-pairs.js';
 import { groupViewRoutes } from './routes/group-view.js';
 import { healthRoutes } from './routes/health.js';
 import { openApiRoutes } from './routes/openapi.js';
+import { positionRoutes } from './routes/positions.js';
 import { redemptionRoutes } from './routes/redemptions.js';
 import { roseNoteRoutes } from './routes/rose-notes.js';
 import { strategyRoutes } from './routes/strategy.js';
@@ -32,6 +34,18 @@ export interface OpenApiInfo {
   readonly title: string;
   readonly version: string;
   readonly description?: string;
+}
+
+/**
+ * The parked oracle trust inputs the `/positions` mark-to-market is evaluated against (§15 oracle
+ * integrity). REQUIRED whenever a `priceOracle` is composed — never silently defaulted by the API.
+ * Loaded by the composition root and injected (the API/oracle layers read no env).
+ */
+export interface MarkTrustInputs {
+  /** Max age (ms) before a quote is STALE. Non-negative. */
+  readonly freshnessBoundMs: number;
+  /** Max plausible |(P − P₀)/P₀| before a figure is flagged DIVERGENT. Positive decimal string. */
+  readonly maxRelativeDivergence: string;
 }
 
 /** Injected dependencies for the boundary. The app NEVER opens these connections itself. */
@@ -64,6 +78,17 @@ export interface ApiDeps {
    * direct `@rose/chain`/`viem` edge. When absent, the strategy write path is a typed 503 (refuse-if-absent).
    */
   readonly strategy?: StrategyExecutor;
+  /**
+   * Optional read-only `PriceOracle` (Story 8.1, FR-24) — supplies the reference-asset price for the
+   * `/positions` mark-to-market (Story 8.4). Injected port (NFR-8); the oracle writes NO postings.
+   * When absent, `/positions` marks are the honest NO_FEED state (never a fabricated price).
+   */
+  readonly priceOracle?: PriceOracle;
+  /**
+   * Optional oracle trust inputs (§15). REQUIRED when `priceOracle` is composed (else `/positions`
+   * returns a typed 503 — never silently default a trust bound). Ignored when no oracle is composed.
+   */
+  readonly markTrust?: MarkTrustInputs;
   /** Optional OpenAPI metadata override. */
   readonly openApiInfo?: OpenApiInfo;
   /** Optional Fastify logger toggle (defaults off — tests stay quiet). */
@@ -181,6 +206,7 @@ export async function buildApp(deps: ApiDeps, ext?: BuildAppExtensions): Promise
   await app.register(openApiRoutes);
   await app.register(groupViewRoutes(deps));
   await app.register(coupledPairRoutes(deps));
+  await app.register(positionRoutes(deps));
   await app.register(roseNoteRoutes(deps));
   await app.register(subscriptionRoutes(deps));
   await app.register(redemptionRoutes(deps));

@@ -1040,3 +1040,61 @@ trial explicitly detect and report the break condition (a price gap past the flo
 would go negative). No leg goes negative while within the barrier. This is exactly the
 conditional issuer-neutrality the PRD names as the key model risk (§15) — confirmed, not refuted,
 within its stated bounds.
+
+
+---
+
+# BMAD Pipeline Report — Epic 8: Secondary-Trading Position Layer (§4.8) — 2026-06-19
+
+**Run mode:** autonomous, story-after-story, each story in a **fresh sub-agent** (clean context). Orchestrator **independently re-ran the full gate** after every story before accepting it.
+**Baseline commit:** `8beba739bd3b32f1dcedb36912718ad136904a58` · **No git commits** (changes left in the working tree).
+**Result:** ✅ **6 / 6 stories `done`**, `epic-8: done`.
+
+## Per-story results
+
+| Story | Title | Status | Tests (cumulative) | Migration |
+|-------|-------|--------|--------------------|-----------|
+| 8.1 | Substitutable price-oracle port + mark-to-market service | ✅ done | 840 | — |
+| 8.2 | Persist per-user position model (leverage pinned 1x) | ✅ done | 859 | `0009-positions` |
+| 8.3 | Open/close over the atomic subscribe/redeem package flow | ✅ done | 874 | — |
+| 8.4 | Position P&L API + live Exchange-terminal wiring | ✅ done | 899 | — |
+| 8.5 | Position↔pair reconciliation (per-pair/per-side residual-backing) | ✅ done | 910 | — |
+| 8.6 | Solvency guardrail for independent single-side close (§8 Q8) | ✅ done | 916 | — |
+
+## What was built
+
+- **`@rose/price-oracle`** (new) — substitutable **read-only** `PriceOracle` port + CSV/replay adapter (no live OANDA/LMAX) + `markToMarket(pair, quote, options)` from the **real pair parameters** (anchor P₀, legs, unrealized P&L, floor, distance-to-floor). Explicit `NO_FEED` / `STALE` / `DIVERGENT` / `INVALID_PRICE` states — a mark is **never fabricated**; provenance + freshness bound on every mark.
+- **`@rose/positions`** (new, migration `0009`) — position entity with a NOT-NULL FK to `coupled_pairs` (a lone leg is unrepresentable), side L/S, entry = anchor P₀ `decimal(18,8)`, NUMERIC money (NFR-2), `leverage = 1` DB CHECK + app guard, lifecycle `OPEN → (RESET) → CLOSED` (re-anchor / crystallise / re-base on the D1/D1a boundary), triggers so a position never outlives a CLOSED pair. Plus:
+  - `position-service.ts` (8.3) — open/close **composing** the real Epic-5 `MintPairDualWrite`/`BurnPairDualWrite` outbox-saga + Epic-6 subscribe/redeem plans; the position is recorded/closed **only at the on-chain commit point** (no optimistic success; paired both-or-neither mint/burn).
+  - `reconcile.ts` (8.5) — per-pair **and** per-side residual-backing reconciliation reusing the FR-10 reconcile-and-correct pattern; over-exposure on one pair/side is never masked by headroom elsewhere; corrections are journaled and surfaced (auditable, never a silent liquidation).
+  - `SolvencyGuardrailError` (8.6) — typed, rule-named (`§11.4-solvency-guardrail-independent-single-side-close`, UX-DR5) refusal that **fail-closes the D1 single-side close before any burn**.
+- **`@rose/api`** — `GET /positions?owner=&referenceAsset=` (Fastify + Zod + OpenAPI); money as **decimal strings at the boundary only** (storage/compute stay integer/NUMERIC); error registry maps `SolvencyGuardrailError → 409 SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED`.
+- **`@rose/web`** — behavioural wiring of the existing Story-6.6 terminal components (`positions-table`, `pair-strip`, `order-ticket`, `exchange-trading`, chart head) to live positions + marks + P&L (UX-DR2), honest "no price feed" / stale-mark states (UX-DR4), Review→Confirm pending-until-commit (UX-DR6), disabled fixed-1x leverage selector. **No new visual design / no new UX-DR.**
+
+## Final gate (whole tree, orchestrator-verified)
+
+| Gate step | Result |
+|-----------|--------|
+| `pnpm typecheck` (`tsc -b`) | ✅ pass |
+| `pnpm lint` (`eslint .`) | ✅ pass |
+| `pnpm test` (`vitest run`) | ✅ **916 passed / 106 files** |
+| `pnpm format` + `pnpm format:check` | ✅ pass |
+| `pnpm check:regime` | ✅ pass (`/prod` ↮ `/throwaway`) |
+| `pnpm check:migrations` (up→down→up) | ✅ pass (9 migrations) |
+| `forge test` (`prod/contracts`) | ✅ **171 passed** |
+
+The deployed coupling contracts were **not modified** (no re-audit). PostgreSQL on host port 5544 left migrated + seeded.
+
+## Documented / deferred decisions
+
+- **§8 Q8 / §11.4 counterparty-inventory model — board-gated, unresolved.** Story 8.6 ships only the **P0-safe fail-closed guardrail**; the full matched-book re-assignment vs house/inventory behaviour is **not built** (out of P0). The independent single-side close (D1 topology — opposite leg held by another user) is refused with the typed rule-named UX-DR5 error until the decision lands. Stories 8.1–8.5 were confirmed to **not depend** on this decision.
+- **P0 interpretations** (in each story's Dev Notes): mark-to-market prices the pair (no owner/side ownership) at 8.1; oracle trust inputs (`freshnessBoundMs`, `maxRelativeDivergence`) are fail-closed required inputs; token smallest-unit magnitudes cross the API as raw integer strings while genuine prices cross as decimal strings; reconciliation `exposure = Σ position.collateral`, `backing` = residual leg value (`collateral == size_units` in paper P0).
+
+## ⚠️ Flag for the user
+
+The mandated `pnpm format` gate step normalized **~12 pre-existing format-drifted files** that were already failing `prettier --check` **before** Epic 8 (e.g. `prod/packages/config/src/config.ts`, `prod/packages/api/src/serve.ts`, `prod/packages/reconcile/src/group-view.ts`, several `prod/packages/web/` surfaces). These diffs are **cosmetic line-reflow only (zero logic change)** and are **required for a green `format:check`** — reverting them would turn the gate red. They are independent of the Epic 8 work; keep or discard at your discretion.
+
+## Run notes
+
+- The **Story 8.2 sub-agent hit a transient API socket error** at the very end (after its work + gate were already complete). The orchestrator detected the abnormal exit, **independently re-ran the full gate**, spot-checked the critical invariants in code, confirmed genuinely green, and continued — no work was lost.
+- Fully autonomous: **zero user checkpoints**, no git commits. Epic 8 retrospective remains `optional`.

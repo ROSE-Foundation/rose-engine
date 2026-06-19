@@ -4,6 +4,9 @@
 import type {
   CoupledPairResponse,
   GroupViewResponse,
+  PositionMarkResponse,
+  PositionResponse,
+  PositionsResponse,
   RedeemRequest,
   RedemptionResponse,
   RoseNoteResponse,
@@ -14,12 +17,24 @@ import type {
 export type {
   CoupledPairResponse,
   GroupViewResponse,
+  PositionMarkResponse,
+  PositionResponse,
+  PositionsResponse,
   RedeemRequest,
   RedemptionResponse,
   RoseNoteResponse,
   SubscribeRequest,
   SubscriptionResponse,
 };
+
+/** A per-user position with its live mark (the Exchange-terminal row source, Story 8.4). */
+export type Position = PositionResponse;
+
+/** A position's live mark (status + directional P&L; trusted fields null unless OK). */
+export type PositionMark = PositionMarkResponse;
+
+/** The explicit mark state — OK renders a live mark/P&L; the rest are honest empty-states (UX-DR4). */
+export type MarkStatus = PositionMarkResponse['status'];
 
 /** A monetary amount over the wire (NFR-2): every value a string, `scale` metadata. */
 export type Money = GroupViewResponse['consolidated'][number]['nav'];

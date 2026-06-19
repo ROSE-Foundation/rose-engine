@@ -109,7 +109,9 @@ function Shell(): React.JSX.Element {
         {surface === 'home' && <Home onSelect={setSurface} />}
         {surface === 'covenant-console' && <CovenantConsole />}
         {surface === 'coupled-pair' && <CoupledPairPanel />}
-        {surface === 'exchange-trading' && <ExchangeTrading onNavigate={setSurface} />}
+        {surface === 'exchange-trading' && (
+          <ExchangeTrading onNavigate={setSurface} owner={resolveSubscriberAddress()} />
+        )}
         {surface === 'subscriber' && <SubscriberPanel />}
         {surface === 'alpha-engine' && <AlphaEngineSurface />}
       </main>

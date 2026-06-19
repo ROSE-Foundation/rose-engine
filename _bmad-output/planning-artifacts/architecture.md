@@ -12,6 +12,9 @@ date: '2026-06-15'
 lastStep: 8
 status: 'complete'
 completedAt: '2026-06-15'
+amendments:
+  - date: '2026-06-19'
+    change: 'Appended Secondary-Trading Position Layer (Option C) decision + price-oracle/positions packages and FR-23–FR-27 structure mapping, per sprint change 2026-06-18. Baseline 2026-06-15 preserved (append-only).'
 ---
 
 # Architecture Decision Document
@@ -169,6 +172,23 @@ forge install OpenZeppelin/openzeppelin-contracts
 
 - **Single-source declarative rule spec + codegen** *(decision — Fabrice, this session)*. A single versioned **rule specification** (a small JSON/DSL describing eligibility, transfer restrictions, the Model-A bright line, and pair coupling) is the source of truth. Codegen emits **both** the off-chain `flow_permissions`/`OffChainPolicyProvider` config **and** the on-chain compliance configuration. A shared set of **conformance test vectors** is executed against both planes so the two rule sets **cannot silently diverge** (NFR-8, SM-4).
 
+### Secondary-Trading Position Layer (Option C) — off-chain synthetic positions *(sprint change 2026-06-18)*
+
+- **Decision — Option C.** Subscribers get a per-user *directional* view (entry, mark, P&L) layered **over issued coupled pairs**, never a single on-chain leg. Of four resolutions (A order-book/CLOB; B market-maker/AMM; C off-chain synthetic layer; D redefine contracts for single legs), **C** preserves the atomic-coupling invariant, leaves the deployed ERC-3643-compatible contracts **untouched (no new compliance rule, no re-audit)**, and reuses proven patterns (outbox/saga, reconcile-and-correct, the `postTransfer` chokepoint). It is **not** a venue/CLOB/AMM (PRD §5). [Source: PRD §4.8, FR-23–FR-27]
+- **Non-negotiable guardrail.** The atomic-coupling invariant and the deployed coupling contracts **must not change**. No single-leg mint/burn/transfer anywhere; positions are composed from the **existing atomic subscribe/mint + redeem/burn flow** (FR-11, FR-18, FR-21). Stories 4-3/4-4 and FR-18/FR-19/FR-21 are untouched and not re-audited. Any need to alter on-chain coupling re-opens the resolution (toward Option D) with a fresh audit + product-safety sign-off (§11.3).
+- **Position model (FR-23):** new off-chain `positions` table `(owner, reference_asset, side L|S, size/units, entry = anchor P₀, collateral, leverage, realized_pnl, unrealized_pnl, lifecycle, coupled_pair_id → issued pair)`.
+  - Always references an issued coupled pair (FK NOT NULL); a single-leg on-chain artifact is **unrepresentable** (mirrors the §4.2 coupled-pair freeze).
+  - `leverage` modelled but **pinned to 1x in P0** — a `CHECK (leverage = 1)` / domain guard rejects >1x; leveraged positions (>1x) are post-P0 (§17).
+  - Lifecycle `OPEN → (RESET) → CLOSED`; `RESET` is the **D1/D1a settlement boundary** of the underlying pair (§4.2) — entry re-anchors to the new P₀, unrealized P&L **crystallises to realized/withdrawable**, the position re-bases on the pair's fresh symmetric split (no carried P&L). A position never outlives a `CLOSED` pair.
+  - Money fields integer-smallest-unit / **`NUMERIC`**; `entry` = P₀ `decimal(18,8)` (NFR-2). Reversible migration from first commit (NFR-5).
+- **Price-oracle port + mark-to-market (FR-24):** a **substitutable** `PriceOracle` port (NFR-8) supplies the reference-asset price; a **mark-to-market service** computes entry/mark/unrealized P&L from real pair params (`legsAtPrice` / floor / distance-to-floor). P0 adapter = **CSV/replay or testnet feed** (no live OANDA/LMAX, §14). The oracle is **read-only market data — never a writer of postings**. Absent feed ⇒ explicit **"no price feed"** state (marks never fabricated). Each mark carries **provenance + a freshness bound**: a stale price ⇒ explicit **stale-mark** state; an implausibly divergent oracle figure is **flagged, not trusted** (oracle integrity = named trust input, §15).
+- **Position service (FR-25):** `openPosition`/`closePosition` compose the **existing atomic pair flow** — open drives the real FR-11/FR-18 subscribe+mint path, close drives the real FR-21 redeem/burn path. Every open/close ⇒ a **paired (both-or-neither)** on-chain action; a single-leg path is impossible; capital moves **only** through `postTransfer`.
+  - **Open sub-decision (§8 Q8 / §11.4):** an independent close of one side (D1 topology — the opposite leg held by another user) must **not** force a whole-package burn of the other holder's leg; it resolves via re-assignment or a house/inventory model, and the on-chain package burns only when **both** sides are released. Until that model is chosen, this path is **gated by the §11.4 solvency guardrail**. *(The rest of Option C does not depend on it.)*
+- **API (FR-26):** per-user positions + live P&L over the existing **Fastify + Zod + OpenAPI** boundary (Story 6.1); money as **decimal strings at the boundary** only (storage/compute stay integer / `NUMERIC`, NFR-2); refusals use the existing `{ error: { code, message } }` contract.
+- **Web wiring (FR-26, FR-14):** replace the price-feed empty-states in `prod/packages/web/src/surfaces/exchange-trading/*` (shipped by Story 6.6) with **live positions + marks**, reusing the existing terminal components (`market-list`, `pair-strip`, `order-ticket`, `positions-table`, `chart-placeholder`); oracle connected ⇒ live mark/P&L, oracle absent ⇒ documented empty-state; add live/stale-mark states (UX-DR4). **Behavioural wiring only — no new visual design.**
+- **Position ↔ pair reconciliation (FR-27):** reuses the **FR-10 reconcile-and-correct** pattern, **chain authoritative** for the underlying pairs. Invariant is **per-pair, per-side**: aggregate off-chain position exposure for each issued pair and side (L/S) **never exceeds the residual collateral backing** of that pair/side (the residual pool after any D1a reset/withdrawal — *not* gross issued notional netted across pairs/sides). Over-exposure on one pair/side is **not masked** by headroom on another. A correction that reduces/voids a user claim is **journaled and surfaced** (auditable, NFR-3) — never a silent liquidation.
+- **Regime & seams:** all in the **PROD** regime, TypeScript, behind clean interfaces (NFR-7); `/prod` never imports `/throwaway`; the oracle and the counterparty model are substitutable seams (NFR-8).
+
 ### API & Communication Patterns
 
 - **API style:** typed **REST** over **Fastify** (TypeScript) with **Zod** request/response validation and an OpenAPI document for auditability and any future external/audit consumers. *(Architecture default; chosen over tRPC because a regulated system benefits from an explicit, language-agnostic, documented contract — revisable.)*
@@ -316,6 +336,15 @@ rose-engine/
 │   │   │   │   └── services/          # mint/burn/agent-power orchestration
 │   │   │   └── *.test.ts
 │   │   ├── reconcile/                 # FR-9, FR-10 — group view + ledger↔chain correct-toward-chain
+│   │   ├── price-oracle/              # FR-24 — substitutable PriceOracle port + CSV/replay & testnet adapters
+│   │   ├── positions/                 # FR-23/25/26/27 — off-chain synthetic positions (derived layer)
+│   │   │   ├── src/
+│   │   │   │   ├── schema/            # drizzle: positions (FK→coupled_pairs, leverage CHECK=1 in P0)
+│   │   │   │   ├── migrations/        # reversible (NFR-5)
+│   │   │   │   ├── mark-to-market.ts  # entry/mark/unrealized P&L from pair params + oracle price
+│   │   │   │   ├── position-service.ts  # open/close composing the atomic subscribe/redeem flow
+│   │   │   │   └── reconcile.ts       # per-pair/per-side residual-backing invariant (reuses FR-10)
+│   │   │   └── *.test.ts
 │   │   ├── rose-note/                 # FR-11, FR-20, FR-21 — subscription/redemption/paper execution
 │   │   ├── api/                       # Fastify REST + Zod + OpenAPI (boundary for surfaces)
 │   │   └── web/                       # React + Vite surfaces (FR-14)
@@ -341,6 +370,7 @@ rose-engine/
 - **Capital-movement boundary:** `postTransfer` is the **only** writer of transfer postings (FR-7). The double-entry trigger is the database-level backstop (FR-3).
 - **Chain boundary:** the `chain` package is the only module talking to Sepolia (viem). Dual writes cross this boundary via the **outbox** with the on-chain tx as commit point.
 - **Rule boundary:** the `rule-spec` package is the only source of authorization rules; `authorization` (off-chain) and `contracts` (on-chain) consume generated artifacts + conformance vectors.
+- **Position boundary:** `positions` is a **derived layer** — it never mints/transfers a single leg and never writes postings except through the atomic pair flow / `postTransfer`; the chain stays authoritative for the underlying pairs (FR-27).
 - **Regime boundary:** `/prod` ↮ `/throwaway` (CI-enforced, orthogonal to language).
 - **Money boundary:** testnet/paper vs real is a gated runtime switch — never a config flip to mainnet/real capital (§11.3).
 
@@ -354,6 +384,8 @@ rose-engine/
 | Rule equivalence (single source) | FR-19, §8 Q5 | `prod/packages/rule-spec` |
 | On-chain compliance / mint / burn / agent powers | FR-18, FR-19, FR-21, FR-22 | `prod/contracts` + `prod/packages/chain` |
 | Reconciliation & group view | FR-9, FR-10 | `prod/packages/reconcile` |
+| Price oracle (mark-to-market input) | FR-24 | `prod/packages/price-oracle` |
+| Secondary-trading position layer | FR-23, FR-25, FR-26, FR-27 | `prod/packages/positions` (+ `api`, `web` for FR-26) |
 | Rose Note lifecycle & paper execution | FR-11, FR-20, FR-21 | `prod/packages/rose-note` |
 | Engine surfaces (all functional) | FR-14 | `prod/packages/api` + `prod/packages/web` |
 | Coupled-coin model validation | FR-15, FR-16, FR-17 | `throwaway/coupled-math`, `throwaway/simulator` |

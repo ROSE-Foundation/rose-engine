@@ -11,8 +11,10 @@ import type {
   AccountBalance,
   GroupViewEntity,
   GroupViewResponse,
+  Position,
+  PositionMark,
 } from '../../lib/contract-types.js';
-import { REFRESH_WINDOW_MS, useGroupView } from '../../lib/queries.js';
+import { REFRESH_WINDOW_MS, useGroupView, usePositions } from '../../lib/queries.js';
 import { ChartPlaceholder } from './chart-placeholder.js';
 import { MarketList } from './market-list.js';
 import { PayoffChart } from './payoff-chart.js';
@@ -50,8 +52,44 @@ function magnitude(decimal: string): string {
   return decimal.replace(/^-/, '');
 }
 
+/** The chart-head live price for the selected market: the OK mark price, a stale figure, or the
+ * honest "price feed not connected" empty-state when no oracle/position is available (UX-DR4). Never
+ * fabricates a price. The representative `mark` is taken from a held position on this market. */
+function MarketPrice({ mark }: { mark: PositionMark | null }): React.JSX.Element {
+  if (mark && mark.status === 'OK' && mark.markPrice !== null) {
+    return (
+      <div className="text-right">
+        <p className="font-numeric text-2xl leading-none">{mark.markPrice}</p>
+        <p className="mt-1 text-[11px] text-gain">live mark</p>
+      </div>
+    );
+  }
+  if (mark && mark.status === 'STALE' && mark.markPrice !== null) {
+    return (
+      <div className="text-right text-warn">
+        <p className="font-numeric text-2xl leading-none">{mark.markPrice}</p>
+        <p className="mt-1 text-[11px]">stale mark</p>
+      </div>
+    );
+  }
+  return (
+    <div className="text-right text-dim">
+      <p className="font-numeric text-2xl leading-none">—</p>
+      <p className="mt-1 text-[11px]">price feed not connected</p>
+    </div>
+  );
+}
+
 /** A single labelled metric in the chart-head stat strip; `feed` marks a price-feed-dependent gap. */
-function Stat({ label, value, feed }: { label: string; value: string; feed?: boolean }): React.JSX.Element {
+function Stat({
+  label,
+  value,
+  feed,
+}: {
+  label: string;
+  value: string;
+  feed?: boolean;
+}): React.JSX.Element {
   return (
     <div>
       <p className="text-[10px] uppercase tracking-wide text-dim">{label}</p>
@@ -75,10 +113,16 @@ const PANEL = 'rounded-lg border border-border bg-card';
  */
 export function ExchangeTradingView({
   view,
+  positions = [],
+  owner,
   now,
   onNavigate,
 }: {
   view: GroupViewResponse;
+  /** The viewer's live per-user positions + marks (Story 8.4). Empty ⇒ no oracle/owner wired. */
+  positions?: readonly Position[];
+  /** The viewer's owner reference — drives the order-ticket open/close target (paper/local). */
+  owner?: string;
   now?: number;
   onNavigate?: (surface: 'subscriber') => void;
 }): React.JSX.Element {
@@ -95,14 +139,20 @@ export function ExchangeTradingView({
   const marketPair = market
     ? (pairs.find((p) => p.referenceAsset === market.referenceAsset) ?? null)
     : null;
-  const scopedPairs = market
-    ? pairs.filter((p) => p.referenceAsset === market.referenceAsset)
-    : pairs;
+  const scopedPositions = market
+    ? positions.filter((p) => p.referenceAsset === market.referenceAsset)
+    : positions;
+  // The representative live mark for the chart-head price (a held position on this market).
+  const marketMark = scopedPositions[0]?.mark ?? null;
 
   return (
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-end">
-        <LiveIndicator lastUpdated={view.generatedAt} refreshWindowMs={REFRESH_WINDOW_MS} now={now} />
+        <LiveIndicator
+          lastUpdated={view.generatedAt}
+          refreshWindowMs={REFRESH_WINDOW_MS}
+          now={now}
+        />
       </div>
 
       {market && (
@@ -116,14 +166,9 @@ export function ExchangeTradingView({
               <div className="flex items-start justify-between gap-4">
                 <div>
                   <h2 className="font-display text-lg font-semibold">{market.referenceAsset}</h2>
-                  <p className="text-xs text-dim">
-                    coupled L/S pair · {market.pairs} outstanding
-                  </p>
+                  <p className="text-xs text-dim">coupled L/S pair · {market.pairs} outstanding</p>
                 </div>
-                <div className="text-right text-dim">
-                  <p className="font-numeric text-2xl leading-none">—</p>
-                  <p className="mt-1 text-[11px]">price feed not connected</p>
-                </div>
+                <MarketPrice mark={marketMark} />
               </div>
               <div className="mt-3 flex flex-wrap gap-6">
                 <Stat label="Pair TVL" value={`${market.collateral} u`} />
@@ -143,7 +188,7 @@ export function ExchangeTradingView({
           </div>
 
           <div className={cn(PANEL, 'min-w-0')}>
-            <OrderTicket pair={marketPair} onNavigate={onNavigate} />
+            <OrderTicket pair={marketPair} owner={owner} onNavigate={onNavigate} />
           </div>
         </div>
       )}
@@ -152,7 +197,7 @@ export function ExchangeTradingView({
         <h2 className="mb-2 font-display text-base font-semibold">
           Open positions{market ? ` · ${market.referenceAsset}` : ''}
         </h2>
-        <PositionsTable pairs={scopedPairs} />
+        <PositionsTable positions={scopedPositions} />
       </section>
 
       {execution.length > 0 && (
@@ -210,13 +255,18 @@ export function ExchangeTradingView({
   );
 }
 
-/** Container: live group view with explicit loading/empty/error states (UX-DR4). */
+/** Container: live group view + the viewer's live positions/marks, with explicit loading/empty/error
+ * states (UX-DR4). The `owner` is an injected prop in paper/local (the deployed session/ONCHAINID
+ * source is ops-deferred); empty ⇒ no positions query and the honest no-feed terminal. */
 export function ExchangeTrading({
+  owner = '',
   onNavigate,
 }: {
+  owner?: string;
   onNavigate?: (surface: 'subscriber') => void;
 } = {}): React.JSX.Element {
   const query = useGroupView();
+  const positionsQuery = usePositions(owner);
 
   if (query.isLoading) {
     return (
@@ -241,6 +291,12 @@ export function ExchangeTrading({
     return <p className="text-muted-foreground">No trading activity yet.</p>;
   }
   return (
-    <ExchangeTradingView view={query.data} now={query.dataUpdatedAt} onNavigate={onNavigate} />
+    <ExchangeTradingView
+      view={query.data}
+      positions={positionsQuery.data?.positions ?? []}
+      owner={owner}
+      now={query.dataUpdatedAt}
+      onNavigate={onNavigate}
+    />
   );
 }

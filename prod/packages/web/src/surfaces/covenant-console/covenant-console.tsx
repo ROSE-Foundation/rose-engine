@@ -177,7 +177,9 @@ export function CovenantConsoleView({
       {/* Covenant monitor — the bright lines (group-level). Shown always; an explicit empty-state
           when no thresholds are configured, rather than silently hiding the section. */}
       <section className="flex flex-col gap-3">
-        <h2 className="font-display text-base font-semibold">Covenant monitor — the bright lines</h2>
+        <h2 className="font-display text-base font-semibold">
+          Covenant monitor — the bright lines
+        </h2>
         {view.covenants.length === 0 ? (
           <p className="text-sm text-muted-foreground">
             Covenant thresholds not configured (set the <code>COVENANT_*</code> parameters to enable
@@ -269,9 +271,7 @@ export function CovenantConsoleView({
               <TR key={entity.entityCode}>
                 <TD>{entity.entityCode}</TD>
                 <TD className="text-muted-foreground">{ROLE_LABEL[entity.role]}</TD>
-                <TD>
-                  {entity.byAsset[0] ? <MoneyCell money={entity.byAsset[0].nav} /> : '—'}
-                </TD>
+                <TD>{entity.byAsset[0] ? <MoneyCell money={entity.byAsset[0].nav} /> : '—'}</TD>
                 <TD>
                   <ReconciliationBadge status={entity.reconciliationStatus} />
                 </TD>

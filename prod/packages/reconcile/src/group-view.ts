@@ -619,8 +619,22 @@ export async function buildGroupView(
     const nav = dominant.assets - dominant.liabilities;
     const th = opts.covenantThresholds;
     covenants.push(
-      computeCovenant('backing-float-floor', 'Backing-float floor', 'floor', backing, nav, th.backingFloatFloor),
-      computeCovenant('deploy-ratio-ceiling', 'Deploy ratio (ceiling)', 'ceiling', deployed, nav, th.deployCeiling),
+      computeCovenant(
+        'backing-float-floor',
+        'Backing-float floor',
+        'floor',
+        backing,
+        nav,
+        th.backingFloatFloor,
+      ),
+      computeCovenant(
+        'deploy-ratio-ceiling',
+        'Deploy ratio (ceiling)',
+        'ceiling',
+        deployed,
+        nav,
+        th.deployCeiling,
+      ),
       // Client-collateral coverage: group assets must cover client claims ≥ 100% (clients always made
       // whole). Honestly computed from existing classifications (NO segregated-asset sub-ledger exists).
       computeCovenant(
@@ -673,7 +687,9 @@ export async function buildGroupView(
     bookMap.set(p.referenceAsset, bucket);
   }
   const coupledCoinBook: CoupledCoinMarketView[] = [...bookMap.values()]
-    .sort((a, b) => (a.referenceAsset < b.referenceAsset ? -1 : a.referenceAsset > b.referenceAsset ? 1 : 0))
+    .sort((a, b) =>
+      a.referenceAsset < b.referenceAsset ? -1 : a.referenceAsset > b.referenceAsset ? 1 : 0,
+    )
     .map((b) =>
       Object.freeze({
         referenceAsset: b.referenceAsset,

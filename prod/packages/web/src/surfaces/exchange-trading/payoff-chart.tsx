@@ -99,15 +99,53 @@ export function PayoffChart({ pair }: { pair: CoupledPairPosition }): React.JSX.
           strokeDasharray="2 4"
         />
         {/* Floor + cap guides. */}
-        <line x1={PAD.left} y1={yFloor} x2={W - PAD.right} y2={yFloor} stroke="var(--gold)" strokeWidth={1} strokeDasharray="4 4" opacity={0.5} />
-        <line x1={PAD.left} y1={yCap} x2={W - PAD.right} y2={yCap} stroke="var(--gold)" strokeWidth={1} strokeDasharray="4 4" opacity={0.5} />
+        <line
+          x1={PAD.left}
+          y1={yFloor}
+          x2={W - PAD.right}
+          y2={yFloor}
+          stroke="var(--gold)"
+          strokeWidth={1}
+          strokeDasharray="4 4"
+          opacity={0.5}
+        />
+        <line
+          x1={PAD.left}
+          y1={yCap}
+          x2={W - PAD.right}
+          y2={yCap}
+          stroke="var(--gold)"
+          strokeWidth={1}
+          strokeDasharray="4 4"
+          opacity={0.5}
+        />
         {/* Anchor (P₀) — the current reference, where both legs sit at K/2. */}
-        <line x1={xAnchor} y1={PAD.top} x2={xAnchor} y2={H - PAD.bottom} stroke="var(--dim)" strokeWidth={1} strokeDasharray="2 3" />
+        <line
+          x1={xAnchor}
+          y1={PAD.top}
+          x2={xAnchor}
+          y2={H - PAD.bottom}
+          stroke="var(--dim)"
+          strokeWidth={1}
+          strokeDasharray="2 3"
+        />
         <circle cx={xAnchor} cy={yMid} r={3} fill="var(--gold)" />
 
         {/* The two real payoff curves. */}
-        <polyline points={shortPts.join(' ')} fill="none" stroke="var(--short)" strokeWidth={2} strokeLinejoin="round" />
-        <polyline points={longPts.join(' ')} fill="none" stroke="var(--long)" strokeWidth={2} strokeLinejoin="round" />
+        <polyline
+          points={shortPts.join(' ')}
+          fill="none"
+          stroke="var(--short)"
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
+        <polyline
+          points={longPts.join(' ')}
+          fill="none"
+          stroke="var(--long)"
+          strokeWidth={2}
+          strokeLinejoin="round"
+        />
       </svg>
 
       {/* Axis context + legend (real values, not a fabricated tape). */}

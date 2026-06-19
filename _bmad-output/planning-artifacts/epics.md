@@ -6,6 +6,7 @@ inputDocuments:
   - '_bmad-output/planning-artifacts/architecture.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-rose-engine-2026-06-15/DESIGN.md'
   - '_bmad-output/planning-artifacts/ux-designs/ux-rose-engine-2026-06-15/EXPERIENCE.md'
+  - '_bmad-output/planning-artifacts/sprint-change-proposal-2026-06-18.md'
 ---
 
 # rose-engine - Epic Breakdown
@@ -65,6 +66,16 @@ This document provides the complete epic and story breakdown for rose-engine, de
 - **FR-16: Simulate threshold-only rebalancing over historical ticks** — The simulator replays ticks (CSV `timestamp,price`) and triggers a reset **only** when a losing leg breaches floor f — never on a clock. At reset, current values are locked, P₀ re-anchors to current price, and the losing holder's loss is locked.
 - **FR-17: Prove no-negative-leg and journal every reset over a tick set** — Over a tick set the simulator demonstrates no leg goes negative, reports any floor-gap breach (issuer-neutrality break condition), journals every reset (price, locked values, new anchor), and exercises the full pair lifecycle end-to-end.
 
+**Secondary-Trading Position Layer — off-chain synthetic over issued pairs (§4.8, PROD regime — added by sprint change 2026-06-18)**
+
+> Option C: an off-chain synthetic position layer giving Subscribers a per-user directional view (entry, mark, P&L) *over* issued coupled pairs — never a single on-chain leg. **Not** a venue/CLOB/AMM (§5); positions are claims/assignments composed from the existing atomic subscribe/mint and redeem/burn flow. On-chain issuance stays atomic-pair-only; the deployed ERC-3643-compatible coupling contracts are **unchanged** (no new compliance rule, no re-audit). Chain + ledger remain the source of accounting/ownership truth; positions are a derived layer.
+
+- **FR-23: Persist an off-chain per-user position model** — Store a position as `(owner, reference asset, side L/S, size/units, entry = anchor P₀, collateral, leverage, realized + unrealized P&L, lifecycle, link to the issued coupled pair)`. Positions are off-chain; they never mint or hold a single on-chain leg. A position always references an issued coupled pair (no single-leg artifact). The schema carries a **`leverage` field but P0 forces it to 1x** (modelled for forward extensibility; >1x is post-P0) — a position with `leverage ≠ 1` is rejected in P0. Lifecycle states are explicit: `OPEN → (RESET) → CLOSED`, where **`RESET` is the D1/D1a settlement boundary** of the underlying pair: on reset the position's `entry` re-anchors to the new P₀, unrealized P&L crystallises to realized/withdrawable, and it re-bases with the pair's fresh symmetric split (no carried P&L). A position never outlives a `CLOSED` pair. Money fields are integer smallest-units / `NUMERIC`; `entry` is the anchor P₀ as `decimal(18,8)` (NFR-2).
+- **FR-24: Price-oracle port + mark-to-market service** — A **substitutable** oracle port (NFR-8) supplies the reference-asset price; a mark service computes entry/mark/unrealized P&L from real pair parameters (`legsAtPrice` / floor / distance-to-floor). The oracle port is **in P0**, with the **P0 adapter = CSV/replay or a testnet feed** (no live OANDA/LMAX, §14). The oracle is a **read-only market-data input — never a writer of postings**. Swapping the adapter changes no caller. An absent feed yields an explicit "no price feed" state — marks are **never fabricated**. The mark carries **price provenance and a freshness/staleness bound**: a price older than the bound yields an explicit **stale-mark** state (not a silently-stale P&L), and the mark is reconcilable with the pair's own anchor/params so an implausibly divergent oracle figure is **flagged, not trusted** (oracle integrity = named trust input, §15).
+- **FR-25: Open / close a position composing the atomic subscribe/redeem pair flow** — Opening a position acquires/assigns exposure against an **atomically issued coupled package** (the real FR-11/FR-18 subscribe + mint path); closing routes the real redeem/burn path (FR-21). The atomic-coupling invariant is preserved; no single-leg mint/burn occurs — every open/close drives a paired (both-or-neither) on-chain action. An **independent close of one side** (when the opposite leg is held by another user — the D1 topology) **does not** force a whole-package burn of the other holder's leg: it resolves through the chosen counterparty/inventory model (re-assignment or house, §8 Q8 / §11.4), and the on-chain package is burned only when both sides are released. *(Until the counterparty model is chosen, this path is gated by the §11.4 solvency guardrail.)*
+- **FR-26: Position P&L API + Exchange-terminal wiring** — Typed REST endpoints expose per-user positions and live P&L (money as **decimal strings at the API boundary** — serialization only; storage/compute stay integer-smallest-unit / `NUMERIC` per NFR-2); the Exchange / Trading surface (FR-14) renders **live positions + marks**, replacing the price-feed empty-states shipped earlier (Story 6.6). The terminal shows live mark/P&L when the oracle is connected, and the documented empty-state when it is not.
+- **FR-27: Position ↔ pair reconciliation (chain authoritative for the underlying pairs)** — Reconciliation verifies a **per-pair, per-side residual-backing invariant**: for each issued coupled pair and each side (L/S), aggregate off-chain position exposure **never exceeds the residual collateral backing of that pair/side** (the residual pool after any D1a reset/withdrawal — *not* gross issued notional netted across pairs or sides). The invariant is checked **per pair and per side** and against the **residual** pool (over-exposure on one pair/side is not masked by headroom on another). Divergence is reported and corrected toward the chain-backed pair state (reusing the FR-10 pattern). Because "correct toward chain" can reduce or void a user's recorded claim, a correction that touches a user position is **journaled and surfaced** (auditable, NFR-3) — never a silent liquidation.
+
 ### NonFunctional Requirements
 
 - **NFR-1 Integrity-by-construction** — Accounting invariants (double-entry balance; no persistent orphan leg) are enforced by the data layer and survive application bugs.
@@ -123,15 +134,26 @@ This document provides the complete epic and story breakdown for rose-engine, de
 - **CI/CD GitHub Actions:** typecheck, ESLint, Vitest, `forge test` (incl. invariant/fuzz), drizzle migration check, regime dependency rule.
 - **Structured logging** at key decision points (postTransfer authorize/deny, mint/burn, outbox commit, reconcile divergence/correction) including entity, account, journal-entry id, on-chain tx hash.
 
+**Secondary-Trading Position Layer (Option C) — sprint change 2026-06-18 (Architecture §"Secondary-Trading Position Layer"):**
+
+- **New PROD packages:** `prod/packages/positions` (FR-23, FR-25, FR-26, FR-27 — position model, open/close composing subscribe/redeem, P&L, position↔pair reconciliation) and `prod/packages/price-oracle` (FR-24 — substitutable `PriceOracle` port + CSV/replay & testnet adapters + `mark-to-market.ts`). API endpoints land in `prod/packages/api`; web wiring in `prod/packages/web`. *(PROD regime, TypeScript, NFR-7 seams; `/prod` never imports `/throwaway`.)*
+- **Reuse, no new on-chain code:** open/close compose the **existing** atomic subscribe/mint (FR-11/FR-18) and redeem/burn (FR-21) flows via the existing outbox/saga; the deployed coupling contracts are **untouched** (no new compliance rule, no re-audit). The atomic-coupling invariant and the `postTransfer` chokepoint are reused, not modified.
+- **Price-oracle seam (FR-24):** substitutable `PriceOracle` port (NFR-8); P0 adapter = CSV/replay or testnet feed (no live OANDA/LMAX, §14); read-only — never writes postings; marks carry provenance + freshness bound; absent feed ⇒ explicit "no price feed" state; stale/implausible price ⇒ flagged stale-mark, not trusted (§15 oracle integrity).
+- **Counterparty / inventory model — OPEN sub-decision (§8 Q8 / §11.4):** an independent single-side close must not force a whole-package burn of the other holder's leg (D1 topology); resolves via re-assignment or house/inventory model; package burns only when **both** sides released. **Until this model is chosen, that path is gated by the §11.4 solvency guardrail** and must be resolved before the dependent Epic 8 story builds. The rest of Option C does not depend on it.
+- **Web wiring (FR-26, FR-14):** replace the price-feed empty-states in `prod/packages/web/src/surfaces/exchange-trading/*` (shipped by Story 6.6) with live positions + marks, **reusing existing terminal components** (`market-list`, `pair-strip`, `order-ticket`, `positions-table`, `chart-placeholder`); add live/stale-mark states (UX-DR4). **Behavioural wiring only — no new visual design.**
+- **Reconciliation (FR-27):** per-pair, per-side residual-backing invariant over the residual pool (post-D1a-reset), reusing the FR-10 reconcile-and-correct pattern; corrections touching a user position are journaled + surfaced (NFR-3), never silent.
+
 **Documentation handoff:**
 
 - Update `docs/SPEC.md` to reflect PRD-governed P0 scope (EVM/ERC-3643/mint/subscription/paper execution now in P0).
+- Document the §4.8 Secondary-Trading Position Layer (Option C) — positions/price-oracle packages, oracle port, position↔pair reconciliation invariant — and the deferred §8 Q8 counterparty/inventory decision.
 
 **Deferred (product/legal/board — accommodate, do not resolve in P0):**
 
 - **D1** Rose Note composition & reset loss-allocation (§8 Q1) — **RESOLVED 2026-06-16: separate L/S, zero-sum directional; losing-leg holder bears the locked loss.** **D1a RESOLVED: crystallised & withdrawable** — each reset realizes/settles the locked P&L (winner withdrawable, loser settled) and both legs re-base symmetric. Forward *implementation*: directional one-leg note shape → Epics 4–6; reset settlement (cash + journal) → Epics 5–7.
 - Two offshore jurisdictions (§8 Q3); claim-issuer / transfer-agent operating model (§8 Q4) — config/role placeholders.
 - Floor-parameter method for `m`/`g` (§8 Q7, SM-C1) — chosen by a stated, defensible method before observing reset rate; config-driven, refuse-if-absent.
+- **Position counterparty / inventory model (§8 Q8 / §11.4)** — matched-book (re-assignment) vs house/inventory; governs independent single-side close (FR-25). **BLOCKING solvency decision**: must be chosen and shown solvency-preserving before the dependent Epic 8 story builds; until then the §11.4 solvency guardrail binds. *(Raised 2026-06-18 by domain-finance review.)*
 
 ### UX Design Requirements
 
@@ -148,9 +170,11 @@ A targeted UX Design Specification was produced this session for the four Engine
 
 **UX-DR coverage:** UX-DR1/2/3 → Story 6.5 (establishes the design system + shared data-product components, reused by 6.6); UX-DR4 → Stories 6.5, 6.6 (and the divergence banner consumes FR-10 from Epic 5); UX-DR5 → Stories 6.1, 6.2; UX-DR6 → Stories 6.2, 6.3; UX-DR7 → Story 6.5; UX-DR8 → Stories 6.5, 6.6.
 
+**Epic 8 (§4.8) UX reuse — no new visual design (Architecture: "behavioural wiring only").** The Exchange-terminal wiring (FR-26) reuses the existing terminal components shipped by Story 6.6 (`market-list`, `pair-strip`, `order-ticket`, `positions-table`, `chart-placeholder`) and these established UX-DRs: **UX-DR4** (live mark vs. stale-mark vs. "no price feed" empty-state), **UX-DR2** (money/numeric display contract for entry/mark/P&L), and **UX-DR6** (Review → Confirm + eligibility gate for open/close). No new UX-DR is introduced.
+
 ### FR Coverage Map
 
-> **Note on FR count:** the PRD/Architecture prose says "21 FRs", but the actual ID set is **FR-1 … FR-22 with no gaps = 22 FRs**. All 22 are mapped below.
+> **Note on FR count:** the original PRD/Architecture prose said "21 FRs"; the baseline ID set is **FR-1 … FR-22 with no gaps = 22 FRs**. The sprint change 2026-06-18 added the §4.8 Secondary-Trading Position Layer (**FR-23 … FR-27**), for a current total of **27 FRs**. All 27 are mapped below.
 
 - **FR-1** → Epic 1 — Record entities and typed accounts
 - **FR-2** → Epic 1 — Record balanced journal entries with postings
@@ -174,8 +198,13 @@ A targeted UX Design Specification was produced this session for the four Engine
 - **FR-20** → Epic 6 — Execute coupled-pair strategy (paper/testnet)
 - **FR-21** → Epic 5 — Burn / retire tokens on redemption
 - **FR-22** → Epic 4 — Privileged transfer-agent / agent powers
+- **FR-23** → Epic 8 — Persist an off-chain per-user position model (leverage pinned 1x)
+- **FR-24** → Epic 8 — Price-oracle port + mark-to-market service (CSV/testnet adapter)
+- **FR-25** → Epic 8 — Open / close a position composing the atomic subscribe/redeem flow
+- **FR-26** → Epic 8 — Position P&L API + Exchange-terminal wiring (replaces 6.6 empty-states)
+- **FR-27** → Epic 8 — Position ↔ pair reconciliation (per-pair/per-side residual-backing)
 
-**NFR coverage:** NFR-1/2/3/5/6 → Epic 1 (data-layer integrity, exact arithmetic, auditability, reversible migrations, test-first); NFR-4/8 → Epic 3 (fail-closed, substitutability); NFR-9 → Epic 5 (ledger↔chain, chain authoritative); NFR-7 (real-time orientation, seams) → cross-cutting, honored in Epics 5 & 6.
+**NFR coverage:** NFR-1/2/3/5/6 → Epic 1 (data-layer integrity, exact arithmetic, auditability, reversible migrations, test-first); NFR-4/8 → Epic 3 (fail-closed, substitutability); NFR-9 → Epic 5 (ledger↔chain, chain authoritative); NFR-7 (real-time orientation, seams) → cross-cutting, honored in Epics 5 & 6. **Epic 8 (§4.8) reuses existing NFRs:** NFR-2 (exact arithmetic, integer/`NUMERIC` storage), NFR-3 (auditable journaled corrections), NFR-8 (substitutable `PriceOracle` port), NFR-9 (chain-authoritative reconcile pattern) — no new NFR IDs introduced.
 
 ## Epic List
 
@@ -222,6 +251,15 @@ Prove the whole loop end-to-end on testnet/paper: an eligible Subscriber subscri
 Put the coupled-coin model on trial in the **throwaway** regime: a reference-math library proving the issuer-neutral invariant `V_A+V_B=K` within the barrier and detecting floor breaches, and a threshold-only simulator that replays real EUR/USD and BTC ticks, journals every reset, proves no negative leg, and traverses the full lifecycle.
 **FRs covered:** FR-15, FR-16, FR-17
 **Standalone:** Yes — fully independent (`/prod` never imports `/throwaway`); can be built in parallel at any time. It is a genuine **risk boundary** (it can refute the model cheaply) and is isolated as disposable code.
+
+### Epic 8: Secondary-Trading Position Layer — Live Per-User Directional View (§4.8)
+Give Subscribers a per-user **directional** view of their exposure — entry, live mark, and P&L — layered **over the issued coupled pairs**, so the **Exchange / Trading** surface becomes functional with live marks (FR-14) without ever creating a single on-chain leg. Open/close **compose the existing atomic subscribe/mint and redeem/burn flow** (Epics 5–6); a substitutable price-oracle port (CSV/testnet) feeds a mark-to-market service; and a per-pair/per-side residual-backing reconciliation keeps positions honest against the chain. On-chain issuance stays atomic-pair-only and the deployed contracts are **unchanged (no re-audit)** — this is an off-chain synthetic layer (Option C), **not** a venue/CLOB/AMM.
+**FRs covered:** FR-23, FR-24, FR-25, FR-26, FR-27
+**NFRs (reused):** NFR-2 (exact arithmetic), NFR-3 (auditable journaled corrections), NFR-8 (oracle substitutability), NFR-9 (chain-authoritative reconcile)
+**UX (reused, no new visual design):** UX-DR4 (live/stale/empty-state), UX-DR2 (money display), UX-DR6 (Review→Confirm + eligibility gate)
+**Includes (additional reqs):** new PROD packages `prod/packages/positions` + `prod/packages/price-oracle` (+ `api`, `web`); reuse of the atomic flows, outbox/saga, `postTransfer` chokepoint and FR-10 reconcile-and-correct pattern; behavioural-only wiring of the existing Story-6.6 terminal components (replacing the price-feed empty-states); `leverage` pinned to 1x.
+**Blocking pre-build decision:** counterparty / inventory model (§8 Q8 / §11.4) must be chosen and shown solvency-preserving before the independent-single-side-close story builds; until then the §11.4 solvency guardrail binds. The rest of the epic does not depend on it.
+**Standalone:** Yes — builds on Epics 2 (pair model), 5 (atomic mint/burn + reconcile pattern) and 6 (subscribe/redeem flow + terminal components); introduces **no on-chain change** and delivers the live directional-view value on its own.
 
 ---
 
@@ -873,3 +911,133 @@ So that I can judge the model across a full lifecycle on real ticks (FR-17, SM-3
 **When** it executes
 **Then** it exercises the full pair lifecycle end-to-end (`PENDING → … → CLOSED`)
 **And** `m` and `g` are chosen by a stated, defensible method *before* observing the reset rate (SM-C1 falsifiability; EUR/USD reset rate must stay near zero with a plausible floor, BTC resets expected)
+
+---
+
+## Epic 8: Secondary-Trading Position Layer — Live Per-User Directional View (§4.8)
+
+Give Subscribers a per-user **directional** view (entry, live mark, P&L) layered over the issued coupled pairs, and make the Exchange/Trading surface functional with live marks — an **off-chain synthetic layer (Option C)**, never a single on-chain leg, never a venue/CLOB/AMM. On-chain issuance stays atomic-pair-only; the deployed coupling contracts are **unchanged (no re-audit)**. Builds on Epic 2 (pair model), Epic 5 (atomic mint/burn + reconcile-and-correct pattern), and Epic 6 (subscribe/redeem flow + terminal components).
+
+> **Regime & invariants (binding):** PROD regime, TypeScript, `/prod` never imports `/throwaway`. New packages `prod/packages/positions` and `prod/packages/price-oracle` (+ `api`, `web`). The atomic-coupling invariant (FR-18/FR-19/FR-21), the `postTransfer` chokepoint (FR-7), and the FR-10 reconcile-and-correct pattern are **reused, not modified**. `leverage` is modelled but **pinned to 1x in P0**. The oracle is **read-only** — it never writes postings. Source: PRD §4.8 (FR-23–FR-27), Architecture §"Secondary-Trading Position Layer (Option C)", Sprint Change Proposal 2026-06-18.
+
+### Story 8.1: Substitutable price-oracle port + mark-to-market service
+
+As a build engineer,
+I want a substitutable `PriceOracle` port with a CSV/replay (and testnet) adapter and a mark-to-market service that prices a pair from its real parameters,
+So that the position layer can compute entry/mark/unrealized P&L from live prices without ever fabricating a mark or coupling callers to a feed (FR-24, NFR-8).
+
+**Acceptance Criteria:**
+
+**Given** the `price-oracle` package
+**When** an adapter is wired
+**Then** a substitutable `PriceOracle` port supplies the reference-asset price, the P0 adapter is **CSV/replay or a testnet feed** (no live OANDA/LMAX), and swapping the adapter changes no caller (NFR-8)
+**And** the oracle is **read-only market data** — it has no path that writes postings
+
+**Given** a connected feed and an issued coupled pair
+**When** the mark-to-market service runs
+**Then** it computes entry (anchor P₀), current mark, and unrealized P&L from the **real pair parameters** (`legsAtPrice` / floor / distance-to-floor) — not from invented numbers
+**And** each mark carries **provenance and a freshness/staleness bound**
+
+**Given** the freshness bound is exceeded, or the feed is absent, or the oracle figure diverges implausibly from the pair's own anchor/params
+**When** a mark is requested
+**Then** a price older than the bound yields an explicit **stale-mark** state (never a silently-stale P&L), an absent feed yields an explicit **"no price feed"** state, and an implausibly divergent figure is **flagged, not trusted** (§15 oracle integrity) — a mark is **never fabricated**
+
+### Story 8.2: Persist the off-chain per-user position model (leverage pinned 1x)
+
+As a build engineer,
+I want a per-user position entity stored off-chain and linked to an issued coupled pair,
+So that a Subscriber's directional exposure is recorded exactly (integer/`NUMERIC` money) without ever creating a single on-chain leg (FR-23, NFR-2).
+
+**Acceptance Criteria:**
+
+**Given** the `positions` package and a reversible migration
+**When** a position is persisted
+**Then** it stores `(owner, reference asset, side L/S, size/units, entry = anchor P₀, collateral, leverage, realized + unrealized P&L, lifecycle, link to the issued coupled pair)`; money fields are integer smallest-units / `NUMERIC` and `entry` is `decimal(18,8)` (NFR-2)
+**And** a position **always references an issued coupled pair** — the schema cannot represent a position with no pair, and **no single-leg on-chain artifact is created**
+
+**Given** the P0 leverage rule
+**When** a position is created with `leverage ≠ 1`
+**Then** it is **rejected** (the field is modelled for forward extensibility, but P0 forces 1x); a test asserts the rejection
+
+**Given** the position lifecycle `OPEN → (RESET) → CLOSED`
+**When** the underlying pair resets (the D1/D1a settlement boundary)
+**Then** the position's `entry` re-anchors to the new P₀, its unrealized P&L **crystallises to realized/withdrawable**, and it re-bases with the pair's fresh symmetric split (no carried P&L)
+**And** a position **never outlives a `CLOSED` pair**
+
+### Story 8.3: Open and close a position over the atomic subscribe/redeem package flow
+
+As a Subscriber (Rose Member),
+I want to open and close a directional position that is backed by the real coupled package,
+So that my exposure is acquired/released through the proven atomic subscribe/mint and redeem/burn flow with the coupling invariant intact (FR-25).
+
+**Acceptance Criteria:**
+
+**Given** an eligible Subscriber and an issued (or to-be-issued) coupled pair
+**When** they open a position
+**Then** opening acquires/assigns exposure against an **atomically issued coupled package** via the real FR-11/FR-18 subscribe + mint path, recording the position (Story 8.2); the action drives a **paired (both-or-neither) on-chain mint** — a single-leg mint is impossible
+
+**Given** a Subscriber closing a position whose opposite side they also control (or the standard whole-package case)
+**When** they close
+**Then** it routes the real FR-21 redeem/burn path, driving a **paired (both-or-neither) on-chain burn** and updating the position lifecycle to `CLOSED` with balanced journal entries — no single-leg burn occurs
+**And** the open/close composes the existing outbox/saga with the on-chain tx as the commit point (no optimistic success)
+
+> **Out of scope for this story:** an **independent** single-side close when the opposite leg is held by **another** user (the D1 topology) is handled by Story 8.6 under the §8 Q8 counterparty/inventory model.
+
+### Story 8.4: Position P&L API + live Exchange-terminal wiring
+
+As a Subscriber (Rose Member),
+I want typed endpoints for my positions and live P&L, and the Exchange/Trading terminal wired to them,
+So that I see my live mark and P&L (or an honest empty-state) in place of the price-feed placeholders shipped earlier (FR-26, FR-14, UX-DR2/4/6).
+
+**Acceptance Criteria:**
+
+**Given** the `api` package
+**When** position/P&L endpoints respond
+**Then** typed REST endpoints expose per-user positions and live P&L with money as **decimal strings at the API boundary** (serialization only — storage/compute stay integer-smallest-unit / `NUMERIC`, NFR-2), validated by Zod and surfaced in the OpenAPI document
+
+**Given** the Exchange/Trading surface and the **existing Story-6.6 terminal components** (`market-list`, `pair-strip`, `order-ticket`, `positions-table`, `chart-placeholder`)
+**When** the oracle is connected
+**Then** the terminal renders **live positions + marks + P&L** (UX-DR2 money display), replacing the price-feed empty-states — **behavioural wiring only, no new visual design**
+**And** when the oracle is absent or stale, it shows the documented **"no price feed" / stale-mark** state (UX-DR4) — never a fabricated mark
+
+**Given** the open/close actions on the terminal
+**When** a Subscriber acts
+**Then** they pass the **Review → Confirm** panel that states the on-chain consequence and stays **pending until the commit point** (UX-DR6), and the leverage selector renders a **disabled / fixed-1x** state in P0
+
+### Story 8.5: Position ↔ pair reconciliation (per-pair, per-side residual-backing)
+
+As an internal operator / steward,
+I want reconciliation to verify that off-chain position exposure never exceeds the residual backing of its pair/side and to correct toward the chain,
+So that the synthetic layer can never over-claim against the real collateral, and any correction touching a user is auditable (FR-27, NFR-3, NFR-9).
+
+**Acceptance Criteria:**
+
+**Given** issued coupled pairs and their off-chain positions
+**When** reconciliation runs (reusing the FR-10 reconcile-and-correct pattern)
+**Then** it verifies, **per pair and per side (L/S)**, that aggregate off-chain position exposure **never exceeds the residual collateral backing** of that pair/side (the residual pool after any D1a reset/withdrawal — **not** gross issued notional netted across pairs or sides)
+
+**Given** a deliberately introduced over-exposure on one pair/side
+**When** reconciliation runs
+**Then** it is **reported and not masked** by headroom on another pair or side
+
+**Given** a deliberately introduced position↔pair mismatch
+**When** reconciliation corrects toward the chain
+**Then** the divergence is **reported and corrected**, and because a correction can reduce or void a user's recorded claim, any correction touching a user position is **journaled and surfaced** (auditable, NFR-3) — **never a silent liquidation**
+
+### Story 8.6: Solvency guardrail for independent single-side close (gated on §8 Q8)
+
+As a risk owner / steward,
+I want an independent single-side close to be fail-closed until the counterparty/inventory model is chosen and shown solvency-preserving,
+So that the D1-topology close path can never break solvency or force a wrongful whole-package burn before the §8 Q8 decision lands (FR-25 remainder, §11.4 guardrail).
+
+> **⚠️ Blocking decision (pre-build):** the counterparty / inventory model (matched-book re-assignment vs house/inventory — §8 Q8 / §11.4) must be chosen and shown solvency-preserving **before** the full re-assignment/house behaviour is built. This story ships the **P0-safe guardrail**; the full model remains board-gated (§11.4) and out of P0 build.
+
+**Acceptance Criteria:**
+
+**Given** a position whose opposite leg is held by **another** user (the D1 topology)
+**When** the holder attempts an **independent single-side close** and the counterparty/inventory model is not yet resolved
+**Then** the path is **fail-closed** under the §11.4 solvency guardrail with an explicit, rule-named refusal (UX-DR5) — it does **not** force a whole-package burn of the other holder's leg, and the on-chain package is burned only when **both** sides are released
+
+**Given** the guardrail is active
+**When** the rest of Epic 8 is exercised
+**Then** the standard whole-package open/close (Story 8.3), pricing, P&L, terminal, and reconciliation all function — confirming the rest of Option C **does not depend** on the deferred §8 Q8 decision

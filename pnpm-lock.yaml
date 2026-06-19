@@ -56,6 +56,12 @@ importers:
       '@rose/ledger':
         specifier: workspace:*
         version: link:../ledger
+      '@rose/positions':
+        specifier: workspace:*
+        version: link:../positions
+      '@rose/price-oracle':
+        specifier: workspace:*
+        version: link:../price-oracle
       '@rose/reconcile':
         specifier: workspace:*
         version: link:../reconcile
@@ -129,6 +135,40 @@ importers:
       '@types/pg':
         specifier: ^8.11.0
         version: 8.20.0
+
+  prod/packages/positions:
+    dependencies:
+      '@rose/chain':
+        specifier: workspace:*
+        version: link:../chain
+      '@rose/ledger':
+        specifier: workspace:*
+        version: link:../ledger
+      '@rose/rose-note':
+        specifier: workspace:*
+        version: link:../rose-note
+      '@rose/shared':
+        specifier: workspace:*
+        version: link:../shared
+      drizzle-orm:
+        specifier: ^0.45.0
+        version: 0.45.2(@types/pg@8.20.0)(pg@8.21.0)
+      viem:
+        specifier: ^2.52.0
+        version: 2.52.2(typescript@5.9.3)(zod@3.25.76)
+    devDependencies:
+      '@types/pg':
+        specifier: ^8.11.0
+        version: 8.20.0
+      pg:
+        specifier: ^8.13.0
+        version: 8.21.0
+
+  prod/packages/price-oracle:
+    dependencies:
+      '@rose/shared':
+        specifier: workspace:*
+        version: link:../shared
 
   prod/packages/reconcile:
     dependencies:

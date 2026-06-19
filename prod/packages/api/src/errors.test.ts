@@ -79,6 +79,18 @@ describe('mapErrorToResponse — domain (422) / conflict (409) / not-found (404)
   it.each(['ConfigRefusalError', 'ChainConfigRefusalError'])('maps %s → 503', (name) => {
     expect(mapErrorToResponse(named(name)).status).toBe(503);
   });
+
+  it('maps SolvencyGuardrailError → 409 SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED (Story 8.6, UX-DR5)', () => {
+    const { status, body } = mapErrorToResponse(
+      named(
+        'SolvencyGuardrailError',
+        '§11.4 solvency guardrail: independent single-side close … burned ONLY when BOTH sides are released.',
+      ),
+    );
+    expect(status).toBe(409);
+    expect(body.error.code).toBe('SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED');
+    expect(body.error.message).toContain('§11.4');
+  });
 });
 
 describe('mapErrorToResponse — Story 6.2 subscription write-path classes', () => {

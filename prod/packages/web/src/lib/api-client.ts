@@ -1,6 +1,7 @@
 import type {
   CoupledPairResponse,
   GroupViewResponse,
+  PositionsResponse,
   RedeemRequest,
   RedemptionResponse,
   RoseNoteResponse,
@@ -39,6 +40,8 @@ export interface ApiClient {
   getSubscription(id: string): Promise<SubscriptionResponse>;
   /** Read a redemption status — `pending` until the on-chain commit point, then `confirmed`. */
   getRedemption(id: string): Promise<RedemptionResponse>;
+  /** List a user's positions with live marks + P&L (Story 8.4, FR-26). */
+  getPositions(owner: string, opts?: { referenceAsset?: string }): Promise<PositionsResponse>;
 }
 
 /** The structured error envelope the boundary returns (`{ error: { code, message } }`). */
@@ -104,6 +107,11 @@ export function createApiClient({
       post<RedemptionResponse>(`/rose-notes/${enc(roseNoteId)}/redemptions`, body),
     getSubscription: (id: string) => get<SubscriptionResponse>(`/subscriptions/${enc(id)}`),
     getRedemption: (id: string) => get<RedemptionResponse>(`/redemptions/${enc(id)}`),
+    getPositions: (owner: string, opts?: { referenceAsset?: string }) => {
+      const params = new URLSearchParams({ owner });
+      if (opts?.referenceAsset) params.set('referenceAsset', opts.referenceAsset);
+      return get<PositionsResponse>(`/positions?${params.toString()}`);
+    },
   };
 }
 

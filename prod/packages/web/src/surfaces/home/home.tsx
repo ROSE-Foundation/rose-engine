@@ -74,7 +74,11 @@ const FOOTER_LINES = [
 ];
 
 /** The landing screen (mock `index.html`): an intro + three view cards + a status footer. */
-export function Home({ onSelect }: { onSelect: (surface: HomeSurface) => void }): React.JSX.Element {
+export function Home({
+  onSelect,
+}: {
+  onSelect: (surface: HomeSurface) => void;
+}): React.JSX.Element {
   return (
     <div className="mx-auto flex min-h-full max-w-[1120px] flex-col">
       <div className="max-w-[680px]">
@@ -121,9 +125,7 @@ export function Home({ onSelect }: { onSelect: (surface: HomeSurface) => void })
                 </li>
               ))}
             </ul>
-            <span
-              className={cn('mt-auto flex items-center gap-2 text-sm font-semibold', c.edge)}
-            >
+            <span className={cn('mt-auto flex items-center gap-2 text-sm font-semibold', c.edge)}>
               {c.cta}{' '}
               <span className="transition-transform group-hover:translate-x-1" aria-hidden>
                 →

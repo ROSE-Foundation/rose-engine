@@ -7,6 +7,7 @@ import { migration0005 } from './0005-rose-notes.js';
 import { migration0006 } from './0006-flow-permissions.js';
 import { migration0007 } from './0007-outbox-events.js';
 import { migration0008 } from './0008-entity-role.js';
+import { migration0009 } from './0009-positions.js';
 
 /** All migrations in apply order. Append new entries; never reorder or edit merged ones. */
 export const MIGRATIONS: readonly Migration[] = [
@@ -18,4 +19,5 @@ export const MIGRATIONS: readonly Migration[] = [
   migration0006,
   migration0007,
   migration0008,
+  migration0009,
 ];

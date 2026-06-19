@@ -238,6 +238,121 @@ export type RedeemRequest = z.infer<typeof RedeemRequestSchema>;
 /** A `:id` path parameter for a redemption id (the idempotency key — a non-empty string, not a UUID). */
 export const RedemptionIdParamSchema = z.object({ id: z.string().min(1) });
 
+// ─── Per-user positions + live P&L (read — Story 8.4, FR-26) ────────────────────────────────────
+
+// A SIGNED smallest-units integer string (P&L can be negative — the losing leg's loss). NFR-2.
+const SIGNED_INTEGER_STRING = z
+  .string()
+  .regex(/^-?\d+$/, 'must be a signed integer smallest-units string (no float, no exponent)');
+
+/** The directional side of a per-user position (PRD glossary L/S). */
+export const PositionSideSchema = z.enum(['LONG', 'SHORT']);
+
+/** The position lifecycle (OPEN → CLOSED; RESET is an event, not a state — 8.2). */
+export const PositionLifecycleSchema = z.enum(['OPEN', 'CLOSED']);
+
+/** The explicit mark state (8.1). A non-`OK` state never carries a trusted price/P&L. */
+export const MarkStatusSchema = z.enum(['OK', 'STALE', 'NO_FEED', 'DIVERGENT']);
+
+/** Provenance of the oracle quote a mark was derived from (8.1). Null when there is no feed. */
+const MarkProvenanceSchema = z.object({
+  source: z.string(),
+  asOf: z.string().datetime(),
+  sequence: z.number().int().optional(),
+});
+
+/**
+ * A position's live mark (8.1 `markToMarket` over the linked coupled pair). The trusted fields
+ * (`markPrice` for STALE/DIVERGENT is the surfaced-but-untrusted figure, `unrealizedPnl`,
+ * `distanceToFloor`) are non-null ONLY when `status === 'OK'`; otherwise null (a mark is NEVER
+ * fabricated). `markPrice` is null only for `NO_FEED`. Prices/floor/distance are decimal strings;
+ * the directional `unrealizedPnl` is a signed smallest-units integer string (NFR-2).
+ */
+export const PositionMarkSchema = z
+  .object({
+    status: MarkStatusSchema,
+    entryPrice: DECIMAL_STRING.describe('Entry price = anchor P₀ (decimal string).'),
+    markPrice: DECIMAL_STRING.nullable().describe(
+      'Oracle price used (decimal string); null only for NO_FEED. Surfaced-but-untrusted for STALE/DIVERGENT.',
+    ),
+    floor: DECIMAL_STRING.describe('Floor f (decimal string) — always surfaced (a pair param).'),
+    distanceToFloor: DECIMAL_STRING.nullable().describe(
+      'distance-to-floor = buffer(1 − |L·r|) − f (decimal); null unless OK.',
+    ),
+    unrealizedPnl: SIGNED_INTEGER_STRING.nullable().describe(
+      "The position side's unrealized P&L in smallest units (signed integer string); null unless OK.",
+    ),
+    floorBreached: z.boolean().nullable().describe('True when buffer ≤ f; null unless OK.'),
+    provenance: MarkProvenanceSchema.nullable(),
+    // `ageMs`/`freshnessBoundMs` are not money — `freshnessBoundMs` is a caller-supplied trust bound
+    // (`markToMarket` accepts any finite non-negative number), so the schema does NOT require an
+    // integer (a fractional bound must not fail response serialization).
+    ageMs: z.number().nullable().describe('Quote age (ms) at evaluation; null when no feed.'),
+    freshnessBoundMs: z
+      .number()
+      .nonnegative()
+      .nullable()
+      .describe(
+        'The freshness bound (ms) the mark was evaluated against; null when no trust input.',
+      ),
+    flags: z
+      .array(z.string())
+      .describe('Every reason the mark is not a plain OK (e.g. ["STALE"]).'),
+  })
+  .describe('A position live mark; trusted fields null unless OK — never a fabricated mark (§15).');
+
+/**
+ * A per-user position as returned by `GET /positions` (FR-26). Smallest-unit magnitudes
+ * (`sizeUnits`/`collateral`/`realizedPnl`) cross as raw smallest-unit integer strings — the
+ * positions row carries no per-token decimal scale, so the boundary fabricates none (the 6.1
+ * coupled-pair-magnitude precedent); `entryPrice`/`leverage` cross as decimal strings; the live
+ * `mark` carries the directional P&L. Every monetary value is a STRING (NFR-2).
+ */
+export const PositionSchema = z
+  .object({
+    id: z.string().uuid(),
+    coupledPairId: z.string().uuid(),
+    owner: z.string(),
+    referenceAsset: z.string(),
+    side: PositionSideSchema,
+    sizeUnits: INTEGER_STRING.describe('Size/units — raw smallest-units string.'),
+    entryPrice: DECIMAL_STRING.describe('Entry = anchor P₀ (decimal string, decimal(18,8)).'),
+    collateral: INTEGER_STRING.describe('Collateral — raw smallest-units string.'),
+    leverage: DECIMAL_STRING.describe('Leverage (decimal string; pinned 1x in P0).'),
+    realizedPnl: SIGNED_INTEGER_STRING.describe('Realized P&L — signed smallest-units string.'),
+    lifecycle: PositionLifecycleSchema,
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+    mark: PositionMarkSchema,
+  })
+  .describe('A per-user position + its live mark; money values are strings (NFR-2).');
+
+/** The inferred wire type of a position (the surface consumer's response type — Story 8.4). */
+export type PositionResponse = z.infer<typeof PositionSchema>;
+
+/** The inferred wire type of a position mark (Story 8.4). */
+export type PositionMarkResponse = z.infer<typeof PositionMarkSchema>;
+
+/** `GET /positions` response — the owner echoed back + their positions with live marks. */
+export const PositionsResponseSchema = z
+  .object({
+    owner: z.string(),
+    positions: z.array(PositionSchema),
+  })
+  .describe('A per-user positions listing with live marks (FR-26).');
+
+/** The inferred wire type of the positions listing (Story 8.4). */
+export type PositionsResponse = z.infer<typeof PositionsResponseSchema>;
+
+/**
+ * The `GET /positions` query string: `owner` (required, non-empty) + an optional `referenceAsset`
+ * narrowing. A missing/empty owner ⇒ 400 at the boundary (Zod), never an unscoped listing.
+ */
+export const PositionsQuerySchema = z.object({
+  owner: z.string().min(1).describe('The per-user owner reference (required).'),
+  referenceAsset: z.string().min(1).optional().describe('Optional reference-asset narrowing.'),
+});
+
 // ─── Coupled-pair strategy execution (write — Story 6.4, FR-20) ─────────────────────────────────
 
 // A NON-negative smallest-units integer string (no sign) — a leg mark value may be 0 (total loss).

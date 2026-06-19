@@ -11,7 +11,9 @@ export function PairStrip({ market }: { market: CoupledCoinMarket }): React.JSX.
           <span aria-hidden>◤</span> Long token · L
         </p>
         <p className="mt-1 font-semibold">{sym.long}</p>
-        <p className="mt-0.5 font-numeric text-xs text-dim">{market.longNotional} units outstanding</p>
+        <p className="mt-0.5 font-numeric text-xs text-dim">
+          {market.longNotional} units outstanding
+        </p>
         <p className="mt-1 text-xs text-muted-foreground">
           Gains as the reference rises. Floors at zero — never liquidated into debt.
         </p>

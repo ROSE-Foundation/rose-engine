@@ -7,6 +7,8 @@
   "references": [
     { "path": "../config" },
     { "path": "../ledger" },
+    { "path": "../positions" },
+    { "path": "../price-oracle" },
     { "path": "../reconcile" },
     { "path": "../rose-note" },
     { "path": "../shared" }

@@ -10,6 +10,8 @@
     { "path": "prod/packages/authorization" },
     { "path": "prod/packages/chain" },
     { "path": "prod/packages/reconcile" },
+    { "path": "prod/packages/price-oracle" },
+    { "path": "prod/packages/positions" },
     { "path": "prod/packages/rose-note" },
     { "path": "prod/packages/api" },
     { "path": "prod/packages/web" }

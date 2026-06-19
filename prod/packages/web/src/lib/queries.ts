@@ -9,6 +9,7 @@ import type { ApiClient } from './api-client.js';
 import type {
   CoupledPairResponse,
   GroupViewResponse,
+  PositionsResponse,
   RedeemRequest,
   RedemptionResponse,
   RoseNoteResponse,
@@ -48,6 +49,22 @@ export function useCoupledPair(id: string): UseQueryResult<CoupledPairResponse, 
     queryFn: () => client.getCoupledPair(id),
     refetchInterval: REFRESH_WINDOW_MS,
     enabled: id.length > 0,
+  });
+}
+
+/** Live per-user positions + marks/P&L for the Exchange terminal (FR-26). Polls the refresh window. */
+export function usePositions(
+  owner: string,
+  opts?: { referenceAsset?: string },
+): UseQueryResult<PositionsResponse, Error> {
+  const client = useApiClient();
+  const referenceAsset = opts?.referenceAsset;
+  return useQuery({
+    queryKey: ['positions', owner, referenceAsset ?? null],
+    queryFn: () =>
+      client.getPositions(owner, referenceAsset !== undefined ? { referenceAsset } : undefined),
+    refetchInterval: REFRESH_WINDOW_MS,
+    enabled: owner.length > 0,
   });
 }
 

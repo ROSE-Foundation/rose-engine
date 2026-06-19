@@ -23,6 +23,8 @@
     "@fastify/swagger": "^9.7.0",
     "@rose/config": "workspace:*",
     "@rose/ledger": "workspace:*",
+    "@rose/positions": "workspace:*",
+    "@rose/price-oracle": "workspace:*",
     "@rose/reconcile": "workspace:*",
     "@rose/rose-note": "workspace:*",
     "@rose/shared": "workspace:*",

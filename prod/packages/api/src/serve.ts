@@ -28,10 +28,40 @@ import {
   type CovenantThresholds,
 } from '@rose/config';
 import { createDb, createPool, migrateUp, type RoseDb } from '@rose/ledger';
+import type { PriceOracle, PriceQuote } from '@rose/price-oracle';
 import { makePaperModeServices, PAPER_MODE_BANNER } from '@rose/rose-note';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
-import { buildApp, type ApiDeps } from './app.js';
+import { buildApp, type ApiDeps, type MarkTrustInputs } from './app.js';
 import { seedPaperDemo } from './seed-demo.js';
+
+/**
+ * Paper-mode read-only `PriceOracle` (Story 8.4): for any reference asset it HONESTLY replays the
+ * issued pair's own anchor P₀ as the live quote — a flat, delta-neutral paper mark (it fabricates NO
+ * market move). An unknown asset ⇒ `null` (the explicit no-feed state). Read-only — writes no postings.
+ */
+function makePaperAnchorReplayOracle(db: RoseDb): PriceOracle {
+  return {
+    source: 'paper-anchor-replay',
+    async getPrice(referenceAsset: string): Promise<PriceQuote | null> {
+      const pair = await db.query.coupledPairs.findFirst({
+        where: (p, { eq }) => eq(p.referenceAsset, referenceAsset),
+      });
+      if (pair === undefined) return null;
+      return {
+        referenceAsset,
+        price: pair.anchorPrice,
+        asOf: new Date(),
+        source: 'paper-anchor-replay',
+      };
+    },
+  };
+}
+
+/** Explicit paper-mode oracle trust inputs (§15) — a generous freshness bound + a 50% divergence band. */
+const PAPER_MARK_TRUST: MarkTrustInputs = {
+  freshnessBoundMs: 24 * 60 * 60 * 1000,
+  maxRelativeDivergence: '0.5',
+};
 
 /** Validated shared basic-auth credentials. */
 export interface BasicAuthCredentials {
@@ -103,9 +133,7 @@ export function isPaperModeRequested(
 export function loadOptionalCovenantThresholds(
   env: Record<string, string | undefined> = process.env,
 ): CovenantThresholds | undefined {
-  const anyPresent = COVENANT_THRESHOLD_KEYS.some(
-    (key) => (env[key] ?? '').trim().length > 0,
-  );
+  const anyPresent = COVENANT_THRESHOLD_KEYS.some((key) => (env[key] ?? '').trim().length > 0);
   return anyPresent ? loadCovenantThresholds(env) : undefined;
 }
 
@@ -247,6 +275,9 @@ async function main(): Promise<void> {
       subscriptions: paper.subscriptions,
       redemptions: paper.redemptions,
       strategy: paper.strategy,
+      // The position P&L endpoint shows LIVE marks in paper mode (anchor-replay oracle, §15 trust).
+      priceOracle: makePaperAnchorReplayOracle(db),
+      markTrust: PAPER_MARK_TRUST,
     };
     console.log(
       '[serve] paper mode ACTIVE — subscribe/redeem/strategy are fully interactive; ' +

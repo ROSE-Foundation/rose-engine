@@ -13,7 +13,9 @@ afterEach(() => {
 describe('CoupledCoinsWalkthrough', () => {
   it('renders the first scene and disables Back at the start', () => {
     render(<CoupledCoinsWalkthrough />);
-    expect(screen.getByRole('heading', { name: /Investors fund the Rose Note/ })).toBeInTheDocument();
+    expect(
+      screen.getByRole('heading', { name: /Investors fund the Rose Note/ }),
+    ).toBeInTheDocument();
     expect(screen.getByText('01 / 06')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Back' })).toBeDisabled();
     // No live pair ⇒ explicitly labelled illustrative.

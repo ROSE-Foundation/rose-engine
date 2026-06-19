@@ -105,13 +105,10 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
 // A covenant threshold is a RATIO in [0, 1] (e.g. '0.60' = 60%). Reject negatives (a negative
 // threshold would make the `/group-view` response fail validation ⇒ 500) and values > 1 (e.g. '60'
 // would mean 6000% and silently never trip a ceiling) — refuse-if-invalid, naming the key.
-const covenantRatioString = decimalString.refine(
-  (s) => {
-    const n = Number(s);
-    return Number.isFinite(n) && n >= 0 && n <= 1;
-  },
-  'must be a ratio between 0 and 1 (e.g. 0.60 for 60%)',
-);
+const covenantRatioString = decimalString.refine((s) => {
+  const n = Number(s);
+  return Number.isFinite(n) && n >= 0 && n <= 1;
+}, 'must be a ratio between 0 and 1 (e.g. 0.60 for 60%)');
 
 const CovenantThresholdsSchema = z.object({
   COVENANT_BACKING_FLOAT_FLOOR: covenantRatioString,

@@ -1,5 +1,5 @@
 # generated: 2026-06-15
-# last_updated: 2026-06-15
+# last_updated: 2026-06-19
 # project: rose-engine
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,8 +35,9 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-15
-last_updated: 2026-06-17T08:30
+last_updated: 2026-06-19
 project: rose-engine
+# Epic 8 cycle started 2026-06-19 (autonomous story-after-story, fresh sub-agent per story)
 project_key: NOKEY
 tracking_system: file-system
 story_location: "{project-root}/_bmad-output/implementation-artifacts"
@@ -104,3 +105,13 @@ development_status:
   7-2-simulate-threshold-only-rebalancing-over-historical-ticks: done
   7-3-prove-no-negative-leg-journal-every-reset-and-traverse-the-full-lifecycle: done
   epic-7-retrospective: optional
+
+  # Epic 8: Secondary-Trading Position Layer — Live Per-User Directional View (§4.8)
+  epic-8: done
+  8-1-substitutable-price-oracle-port-mark-to-market-service: done
+  8-2-persist-the-off-chain-per-user-position-model-leverage-pinned-1x: done
+  8-3-open-and-close-a-position-over-the-atomic-subscribe-redeem-package-flow: done
+  8-4-position-p-l-api-live-exchange-terminal-wiring: done
+  8-5-position-pair-reconciliation-per-pair-per-side-residual-backing: done
+  8-6-solvency-guardrail-for-independent-single-side-close-gated-on-8-q8: done
+  epic-8-retrospective: optional

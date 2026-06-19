@@ -168,4 +168,41 @@ describe('createApiClient', () => {
     expect(res.coupledPairId).toBe('pair-1');
     expect(fetchFn).toHaveBeenCalledWith('http://api.local/rose-notes/note-1', expect.anything());
   });
+
+  it('getPositions sends the owner query and returns the typed positions listing (Story 8.4)', async () => {
+    const body = { owner: '0xowner', positions: [] };
+    const fetchFn = vi.fn(async () => jsonResponse(body));
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    const res = await client.getPositions('0xowner');
+    expect(res.owner).toBe('0xowner');
+    expect(fetchFn).toHaveBeenCalledWith(
+      'http://api.local/positions?owner=0xowner',
+      expect.anything(),
+    );
+  });
+
+  it('getPositions URL-encodes the owner + optional referenceAsset filter', async () => {
+    const fetchFn = vi.fn(async () => jsonResponse({ owner: 'a b', positions: [] }));
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    await client.getPositions('a b', { referenceAsset: 'EUR/USD' });
+    expect(fetchFn).toHaveBeenCalledWith(expect.stringContaining('owner=a+b'), expect.anything());
+    expect(fetchFn).toHaveBeenCalledWith(
+      expect.stringContaining('referenceAsset=EUR%2FUSD'),
+      expect.anything(),
+    );
+  });
+
+  it('getPositions parses a typed refusal envelope (e.g. 503 trust-unavailable)', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse(
+        { error: { code: 'POSITION_MARK_TRUST_UNAVAILABLE', message: 'no trust' } },
+        503,
+      ),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    await expect(client.getPositions('0xowner')).rejects.toMatchObject({
+      code: 'POSITION_MARK_TRUST_UNAVAILABLE',
+      status: 503,
+    });
+  });
 });
