@@ -15,6 +15,7 @@ import type {
 import { REFRESH_WINDOW_MS, useGroupView } from '../../lib/queries.js';
 import { ChartPlaceholder } from './chart-placeholder.js';
 import { MarketList } from './market-list.js';
+import { PayoffChart } from './payoff-chart.js';
 import { OrderTicket } from './order-ticket.js';
 import { PairStrip } from './pair-strip.js';
 import { PositionsTable } from './positions-table.js';
@@ -134,7 +135,7 @@ export function ExchangeTradingView({
               </div>
             </div>
             <div className="p-4">
-              <ChartPlaceholder />
+              {marketPair ? <PayoffChart pair={marketPair} /> : <ChartPlaceholder />}
             </div>
             <div className="border-t border-border p-4">
               <PairStrip market={market} />
