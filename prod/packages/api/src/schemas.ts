@@ -768,3 +768,34 @@ export const ErrorResponseSchema = z
 
 /** A `:id` path parameter validated as a UUID (a malformed id ⇒ 400 at the boundary). */
 export const IdParamSchema = z.object({ id: z.string().uuid() });
+
+// ─── Simulation settings (paper-mode replay feed parameters) ───────────────────────────────────────
+// amplitude/periodSeconds are simulation parameters, NOT money — they cross as plain numbers.
+
+/** The inclusive validation bounds for the simulation settings (surfaced so the UI can build controls). */
+export const SimulationSettingsBoundsSchema = z
+  .object({
+    amplitudeMin: z.number(),
+    amplitudeMax: z.number(),
+    periodSecondsMin: z.number(),
+    periodSecondsMax: z.number(),
+  })
+  .describe('Inclusive bounds the simulation settings are validated against.');
+
+/** The current paper replay-feed settings + monotonic version + bounds. */
+export const SimulationSettingsViewSchema = z
+  .object({
+    amplitude: z.number(),
+    periodSeconds: z.number(),
+    version: z.number().int(),
+    bounds: SimulationSettingsBoundsSchema,
+  })
+  .describe('Paper-mode replay-feed parameters (price oscillation amplitude + cycle period).');
+
+/** A partial update to the simulation settings — any provided field is validated against the bounds. */
+export const SimulationSettingsUpdateSchema = z
+  .object({
+    amplitude: z.number().optional(),
+    periodSeconds: z.number().optional(),
+  })
+  .describe('Patch the paper replay-feed parameters (any subset).');

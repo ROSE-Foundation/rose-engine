@@ -17,6 +17,7 @@ import type {
   PositionsResponse,
   RedemptionResponse,
   RoseNoteResponse,
+  SimulationSettingsView,
   SubscriptionResponse,
 } from '../lib/contract-types.js';
 
@@ -536,6 +537,40 @@ export function positionServiceUnavailableError(): ApiClientError {
   return new ApiClientError(
     'POSITION_SERVICE_UNAVAILABLE',
     'The position open/close service is not configured on this deployment.',
+    503,
+  );
+}
+
+// ─── Simulation settings (paper-mode replay-feed parameters) ────────────────────────────────────
+
+/** The live simulation settings (`GET /simulation/settings` shape): defaults + bounds + version. */
+export function simulationSettings(
+  overrides: Partial<SimulationSettingsView> = {},
+): SimulationSettingsView {
+  return {
+    amplitude: 0.07,
+    periodSeconds: 120,
+    version: 1,
+    bounds: {
+      amplitudeMin: 0,
+      amplitudeMax: 1,
+      periodSecondsMin: 5,
+      periodSecondsMax: 3600,
+    },
+    ...overrides,
+  };
+}
+
+/** The 400 out-of-range refusal as the typed `ApiClientError` the client throws (UX-DR5, rule-named). */
+export function simulationSettingsRangeError(): ApiClientError {
+  return new ApiClientError('SimulationSettingsError', 'amplitude must be within [0, 1].', 400);
+}
+
+/** A 503 refuse-if-absent error (simulation settings are not composed on a non-paper deployment). */
+export function simulationSettingsUnavailableError(): ApiClientError {
+  return new ApiClientError(
+    'SIMULATION_SETTINGS_UNAVAILABLE',
+    'The simulation settings are not configured on this deployment (paper composition not wired).',
     503,
   );
 }

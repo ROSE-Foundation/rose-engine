@@ -34,6 +34,7 @@ import { buildApp, type ApiDeps, type MarkTrustInputs } from './app.js';
 import { makePaperPositionService } from './paper-position-service.js';
 import { makePaperReplayOracle } from './paper-replay-oracle.js';
 import { seedPaperDemo } from './seed-demo.js';
+import { makeSimulationSettingsStore } from './simulation-settings.js';
 
 /** Explicit paper-mode oracle trust inputs (§15) — a generous freshness bound + a 50% divergence band. */
 const PAPER_MARK_TRUST: MarkTrustInputs = {
@@ -250,6 +251,9 @@ async function main(): Promise<void> {
     // is composed here (in @rose/api) — NOT in @rose/rose-note — because @rose/positions already
     // depends on @rose/rose-note + @rose/chain (composing it there would be an import cycle).
     const positionService = makePaperPositionService({ db, paperConfig });
+    // ONE simulation-settings store, shared by the replay oracle (reads amplitude/period) and the
+    // /simulation/settings routes (read/tune them live from the Simulation screen — no redeploy/env).
+    const simulationSettings = makeSimulationSettingsStore();
     deps = {
       db,
       logger: true,
@@ -258,10 +262,11 @@ async function main(): Promise<void> {
       redemptions: paper.redemptions,
       strategy: paper.strategy,
       positionService,
+      simulationSettings,
       // The position P&L endpoint shows LIVE, MOVING marks in paper mode: a deterministic replay feed
-      // (Story-8.1 CsvReplayPriceOracle) oscillates each pair's price around its anchor within the §15
-      // trust band, so directional P&L visibly moves (L gains / S mirrors) instead of sitting flat.
-      priceOracle: makePaperReplayOracle(db),
+      // (Story-8.1 CsvReplayPriceOracle) oscillates each pair's price around its anchor by the settings'
+      // amplitude/period, so directional P&L visibly moves (L gains / S mirrors) instead of sitting flat.
+      priceOracle: makePaperReplayOracle(db, { settings: () => simulationSettings.get() }),
       markTrust: PAPER_MARK_TRUST,
     };
     console.log(

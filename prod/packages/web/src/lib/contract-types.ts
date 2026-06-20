@@ -178,6 +178,40 @@ export interface OverExposedSide {
   overExposedBy: string;
 }
 
+// ─── Simulation settings (paper-mode replay-feed parameters) ─────────────────────────────────────
+//
+// These MIRROR the `@rose/api` Zod schemas (`SimulationSettingsBoundsSchema`,
+// `SimulationSettingsViewSchema`, `SimulationSettingsUpdateSchema`) field for field. They are declared
+// here rather than re-exported because the package root (`@rose/api`) does not re-export them; they MUST
+// be kept in sync with those schemas (the single source of truth). amplitude/periodSeconds are plain
+// NUMBERS (simulation parameters, NOT money — no smallest-units string rule).
+
+/** The inclusive validation bounds for the simulation settings (so the UI can build its controls). */
+export interface SimulationSettingsBounds {
+  amplitudeMin: number;
+  amplitudeMax: number;
+  periodSecondsMin: number;
+  periodSecondsMax: number;
+}
+
+/** The core tunable replay-feed parameters: fractional price-swing amplitude + full cycle period. */
+export interface SimulationSettings {
+  amplitude: number;
+  periodSeconds: number;
+}
+
+/** `GET /simulation/settings` + the body of `PUT /simulation/settings` — settings + version + bounds. */
+export interface SimulationSettingsView extends SimulationSettings {
+  version: number;
+  bounds: SimulationSettingsBounds;
+}
+
+/** The body of `PUT /simulation/settings` — any subset of the tunable parameters. */
+export interface SimulationSettingsUpdate {
+  amplitude?: number;
+  periodSeconds?: number;
+}
+
 /** A position↔pair mismatch and its correction outcome (surfaced — never silent). */
 export interface PositionMismatch {
   positionId: string;

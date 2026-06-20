@@ -19,6 +19,8 @@ import type {
   RedeemRequest,
   RedemptionResponse,
   RoseNoteResponse,
+  SimulationSettingsUpdate,
+  SimulationSettingsView,
   SubscribeRequest,
   SubscriptionResponse,
 } from './contract-types.js';
@@ -212,4 +214,39 @@ export function useReconcilePositions(): UseMutationResult<
 > {
   const client = useApiClient();
   return useMutation({ mutationFn: () => client.reconcilePositions() });
+}
+
+// ─── Simulation settings (paper-mode replay-feed parameters) ─────────────────────────────────────
+
+/** Live paper-mode replay-feed parameters (amplitude + cycle period + bounds + version). A non-paper
+ * deployment surfaces a typed 503 `SIMULATION_SETTINGS_UNAVAILABLE` the Simulation screen NAMES. */
+export function useSimulationSettings(): UseQueryResult<SimulationSettingsView, Error> {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['simulation-settings'],
+    queryFn: () => client.getSimulationSettings(),
+  });
+}
+
+/**
+ * Tune the replay-feed parameters (any subset). On success the settings AND the live positions are
+ * invalidated so the terminal's marks/P&L re-read against the rebuilt price series. A 400
+ * (out-of-range) / 503 (non-paper) surfaces as a typed `ApiClientError` the screen NAMES (UX-DR5).
+ */
+export function useUpdateSimulationSettings(): UseMutationResult<
+  SimulationSettingsView,
+  Error,
+  SimulationSettingsUpdate
+> {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch) => client.updateSimulationSettings(patch),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['simulation-settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['positions'] }),
+      ]);
+    },
+  });
 }

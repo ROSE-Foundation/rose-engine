@@ -10,6 +10,8 @@ import type {
   RedeemRequest,
   RedemptionResponse,
   RoseNoteResponse,
+  SimulationSettingsUpdate,
+  SimulationSettingsView,
   SubscribeRequest,
   SubscriptionResponse,
 } from './contract-types.js';
@@ -63,6 +65,16 @@ export interface ApiClient {
   getClosePositionFlow(id: string): Promise<ClosePositionView>;
   /** Operator position↔pair reconciliation report (Story 8.5, FR-27; report-only). */
   reconcilePositions(): Promise<PositionReconciliationReport>;
+  /**
+   * Read the paper-mode replay-feed simulation parameters (amplitude + cycle period + bounds + version).
+   * A non-paper deployment refuses with a typed 503 `SIMULATION_SETTINGS_UNAVAILABLE`.
+   */
+  getSimulationSettings(): Promise<SimulationSettingsView>;
+  /**
+   * Tune the paper-mode replay-feed parameters (any subset). Out-of-range / non-finite values refuse
+   * with a typed 400 `SimulationSettingsError`; a non-paper deployment refuses with a 503.
+   */
+  updateSimulationSettings(patch: SimulationSettingsUpdate): Promise<SimulationSettingsView>;
 }
 
 /** The structured error envelope the boundary returns (`{ error: { code, message } }`). */
@@ -116,6 +128,17 @@ export function createApiClient({
     return (await res.json()) as T;
   }
 
+  // PUT the body verbatim — used for the simulation settings patch (plain numbers, NOT money).
+  async function put<T>(path: string, body: unknown): Promise<T> {
+    const res = await fetchFn(`${baseUrl}${path}`, {
+      method: 'PUT',
+      headers: { accept: 'application/json', 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) throw await toError(res);
+    return (await res.json()) as T;
+  }
+
   const enc = encodeURIComponent;
 
   return {
@@ -140,6 +163,9 @@ export function createApiClient({
     getClosePositionFlow: (id: string) => get<ClosePositionView>(`/positions/close/${enc(id)}`),
     // The reconcile route takes NO body; POST an empty object (the boundary ignores it).
     reconcilePositions: () => post<PositionReconciliationReport>('/positions/reconcile', {}),
+    getSimulationSettings: () => get<SimulationSettingsView>('/simulation/settings'),
+    updateSimulationSettings: (patch: SimulationSettingsUpdate) =>
+      put<SimulationSettingsView>('/simulation/settings', patch),
   };
 }
 

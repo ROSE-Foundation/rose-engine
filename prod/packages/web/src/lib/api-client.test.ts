@@ -321,4 +321,68 @@ describe('createApiClient', () => {
       status: 503,
     });
   });
+
+  it('getSimulationSettings GETs /simulation/settings and returns the typed view', async () => {
+    const view = {
+      amplitude: 0.07,
+      periodSeconds: 120,
+      version: 3,
+      bounds: { amplitudeMin: 0, amplitudeMax: 1, periodSecondsMin: 5, periodSecondsMax: 3600 },
+    };
+    const fetchFn = vi.fn(async () => jsonResponse(view));
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    const res = await client.getSimulationSettings();
+    expect(res.amplitude).toBe(0.07);
+    expect(res.version).toBe(3);
+    expect(fetchFn).toHaveBeenCalledWith('http://api.local/simulation/settings', expect.anything());
+  });
+
+  it('updateSimulationSettings PUTs the patch (plain numbers) and returns the bumped view', async () => {
+    const view = {
+      amplitude: 0.2,
+      periodSeconds: 120,
+      version: 4,
+      bounds: { amplitudeMin: 0, amplitudeMax: 1, periodSecondsMin: 5, periodSecondsMax: 3600 },
+    };
+    const fetchFn = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => jsonResponse(view),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    const res = await client.updateSimulationSettings({ amplitude: 0.2 });
+    expect(res.version).toBe(4);
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api.local/simulation/settings');
+    expect(init?.method).toBe('PUT');
+    // The amplitude crosses as a plain NUMBER (not a money string).
+    expect(String(init?.body)).toContain('"amplitude":0.2');
+  });
+
+  it('updateSimulationSettings parses the 400 SimulationSettingsError envelope (out-of-range)', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse(
+        { error: { code: 'SimulationSettingsError', message: 'amplitude must be within [0, 1].' } },
+        400,
+      ),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    await expect(client.updateSimulationSettings({ amplitude: 2 })).rejects.toMatchObject({
+      name: 'ApiClientError',
+      code: 'SimulationSettingsError',
+      status: 400,
+    });
+  });
+
+  it('getSimulationSettings parses the 503 SIMULATION_SETTINGS_UNAVAILABLE envelope (non-paper deployment)', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse(
+        { error: { code: 'SIMULATION_SETTINGS_UNAVAILABLE', message: 'Not wired.' } },
+        503,
+      ),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    await expect(client.getSimulationSettings()).rejects.toMatchObject({
+      code: 'SIMULATION_SETTINGS_UNAVAILABLE',
+      status: 503,
+    });
+  });
 });

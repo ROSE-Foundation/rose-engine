@@ -11,6 +11,7 @@ import { CoupledPairSurface } from './surfaces/coupled-pair/coupled-pair.js';
 import { CovenantConsole } from './surfaces/covenant-console/covenant-console.js';
 import { ExchangeTrading } from './surfaces/exchange-trading/exchange-trading.js';
 import { Home } from './surfaces/home/home.js';
+import { SimulationSurface } from './surfaces/simulation/simulation.js';
 import { SubscriberSurface } from './surfaces/subscriber/subscriber.js';
 
 type Surface =
@@ -19,6 +20,7 @@ type Surface =
   | 'coupled-pair'
   | 'exchange-trading'
   | 'subscriber'
+  | 'simulation'
   | 'alpha-engine';
 
 // Topnav surfaces (Home is reached via the logo mark, per the mocks). Labels follow index.html.
@@ -29,6 +31,7 @@ const NAV_SURFACES: readonly Surface[] = [
   'covenant-console',
   'coupled-pair',
   'subscriber',
+  'simulation',
   'alpha-engine',
 ];
 
@@ -38,6 +41,7 @@ const SURFACE_LABELS: Record<Surface, string> = {
   'coupled-pair': 'Coupled Coins',
   'exchange-trading': 'Exchange',
   subscriber: 'Subscriber',
+  simulation: 'Simulation',
   'alpha-engine': 'Alpha Engine',
 };
 
@@ -113,6 +117,7 @@ function Shell(): React.JSX.Element {
           <ExchangeTrading onNavigate={setSurface} owner={resolveSubscriberAddress()} />
         )}
         {surface === 'subscriber' && <SubscriberPanel />}
+        {surface === 'simulation' && <SimulationSurface />}
         {surface === 'alpha-engine' && <AlphaEngineSurface />}
       </main>
     </div>

@@ -87,6 +87,8 @@ const ERROR_REGISTRY: Readonly<Record<string, Mapping>> = Object.freeze({
   InconsistentFlowPolicyError: { status: 422 },
   MintAuthorizationError: { status: 422 },
   BurnAuthorizationError: { status: 422 },
+  // Simulation settings (paper-mode replay feed): an out-of-range/non-finite parameter patch.
+  SimulationSettingsError: { status: 400 },
   MintQuantityDivergenceError: { status: 422 },
   BurnQuantityDivergenceError: { status: 422 },
   ConformanceFailureError: { status: 422 },
