@@ -18,4 +18,12 @@ describe('Home', () => {
     fireEvent.click(screen.getByText('Treasury Dashboard'));
     expect(onSelect).toHaveBeenCalledWith('covenant-console');
   });
+
+  it('shows the POC/DEMO overview describing what the app does', () => {
+    render(<Home onSelect={() => {}} />);
+    expect(screen.getByText('What this proof-of-concept does')).toBeInTheDocument();
+    // A couple of the documented capabilities are present (the living description, kept in sync).
+    expect(screen.getByText('The coupled-coin instrument')).toBeInTheDocument();
+    expect(screen.getByText('Live price simulation')).toBeInTheDocument();
+  });
 });

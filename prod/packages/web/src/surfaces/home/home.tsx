@@ -73,6 +73,62 @@ const FOOTER_LINES = [
   'Delta-neutral by construction',
 ];
 
+/**
+ * A living, English overview of what this POC/DEMO does. KEEP THIS CURRENT: whenever a user-facing
+ * capability of the paper/demo app changes (a new tab, a new flow, a changed behaviour), update this
+ * block in the same change so the first page never drifts from what the app actually demonstrates.
+ */
+const DEMO_OVERVIEW = {
+  badge: 'Paper mode · simulated in-process · no testnet, no real funds, no secrets',
+  lead:
+    'ROSE Engine is an interactive proof-of-concept for a cash-backed coupled-coin system and its ' +
+    'off-chain secondary-trading position layer. Everything here runs in paper mode — every subscribe, ' +
+    'redeem, open, close and reset is simulated in-process — so the full mechanism can be exercised ' +
+    'safely, end to end, without a testnet or real money.',
+  capabilities: [
+    {
+      label: 'The coupled-coin instrument',
+      text:
+        'At issuance a single cash collateral pool backs a delta-neutral long/short token pair. The ' +
+        'collateral pool never changes, each leg is floored at zero (never liquidated into debt), and ' +
+        'rebalancing is threshold-only.',
+    },
+    {
+      label: 'Trade directional positions',
+      text:
+        'From the Exchange terminal you open and close positions over the real atomic ' +
+        'subscribe→mint / redeem→burn package flow, with live moving marks and unrealized P&L. ' +
+        'Leverage is pinned to 1× in this P0 (the selector is shown disabled).',
+    },
+    {
+      label: 'Solvency guardrail (§11.4)',
+      text:
+        'An independent single-side close — when the opposite leg is held by another user — is ' +
+        'fail-closed with an explicit, rule-named refusal. The on-chain package is burned only when ' +
+        'both sides are released.',
+    },
+    {
+      label: 'Position ↔ pair reconciliation',
+      text:
+        'A per-(pair, side) residual-backing report proves off-chain exposure never exceeds the real ' +
+        'collateral. Over-exposure on one side is reported, never masked by headroom on another.',
+    },
+    {
+      label: 'Live price simulation',
+      text:
+        'The Simulation tab tunes the replay price feed (oscillation amplitude + cycle period). Push ' +
+        'the amplitude past the trust band to see a mark flagged DIVERGENT — marks are never ' +
+        'fabricated; an absent or stale feed shows an explicit state, not a number.',
+    },
+    {
+      label: 'Treasury & mechanism views',
+      text:
+        'The Treasury Dashboard monitors covenants and consolidated NAV; the Coupled Coins ' +
+        'walkthrough animates issuance, mark-to-market and the collateral invariant end to end.',
+    },
+  ],
+} as const;
+
 /** The landing screen (mock `index.html`): an intro + three view cards + a status footer. */
 export function Home({
   onSelect,
@@ -134,6 +190,34 @@ export function Home({
           </button>
         ))}
       </div>
+
+      <section
+        aria-labelledby="demo-overview-heading"
+        className="mt-12 rounded-[18px] border border-border bg-card p-6 md:p-8"
+      >
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
+          <h3
+            id="demo-overview-heading"
+            className="font-display text-2xl font-medium tracking-tight"
+          >
+            What this proof-of-concept does
+          </h3>
+          <span className="font-numeric text-[11px] uppercase tracking-wide text-blue">
+            {DEMO_OVERVIEW.badge}
+          </span>
+        </div>
+        <p className="mt-4 max-w-[820px] text-sm leading-relaxed text-muted-foreground">
+          {DEMO_OVERVIEW.lead}
+        </p>
+        <dl className="mt-6 grid gap-x-8 gap-y-5 md:grid-cols-2">
+          {DEMO_OVERVIEW.capabilities.map((cap) => (
+            <div key={cap.label}>
+              <dt className="text-sm font-semibold">{cap.label}</dt>
+              <dd className="mt-1 text-sm leading-relaxed text-muted-foreground">{cap.text}</dd>
+            </div>
+          ))}
+        </dl>
+      </section>
 
       <div className="mt-9 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-5">
         <div className="flex flex-wrap gap-4">
