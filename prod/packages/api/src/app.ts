@@ -20,6 +20,9 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { mapErrorToResponse } from './errors.js';
+import type { FaithfulConfirmationSettingsStore } from './faithful/confirmation-settings.js';
+import type { FaithfulCovenantOverrideStore } from './faithful/covenant-override.js';
+import type { FaithfulReconcileInjectionStore } from './faithful/reconcile-injection.js';
 import type { MockKycRegistry } from './faithful/kyc-registry.js';
 import type { SimulationSettingsStore } from './simulation-settings.js';
 import { coupledPairRoutes } from './routes/coupled-pairs.js';
@@ -27,6 +30,7 @@ import { faithfulOnboardingRoutes } from './routes/faithful-onboarding.js';
 import { groupViewRoutes } from './routes/group-view.js';
 import { healthRoutes } from './routes/health.js';
 import { openApiRoutes } from './routes/openapi.js';
+import { operatorRoutes } from './routes/operator.js';
 import { positionRoutes } from './routes/positions.js';
 import { redemptionRoutes } from './routes/redemptions.js';
 import { roseNoteRoutes } from './routes/rose-notes.js';
@@ -116,6 +120,28 @@ export interface ApiDeps {
    * those routes are a typed 503 (refuse-if-absent). Injected port (NFR-8).
    */
   readonly kycRegistry?: MockKycRegistry;
+  /**
+   * Optional faithful-mode confirmation-settings store (Story 9.1) exposed via the operator control
+   * panel (Story 9.5, FR-32) — the SAME store the async-confirmation transport consumes. Drives
+   * `GET/PUT /operator/confirmation`; absent on a non-faithful / read-only deployment ⇒ those routes
+   * are a typed 503 (refuse-if-absent). The panel sets latencyMs/failureRate/failNext; the next flow
+   * then exhibits the Story-9.1 delayed-commit / compensated-failure behaviour.
+   */
+  readonly confirmationSettings?: FaithfulConfirmationSettingsStore;
+  /**
+   * Optional faithful-mode covenant-breach override (Story 9.5, FR-32) the REAL `/group-view` covenant
+   * computation consults (`forceCovenantBreach`) so the monitor reports a GENUINE BREACH. Drives
+   * `GET/PUT /operator/covenant-breach`; absent on a non-faithful deployment ⇒ those routes (and the
+   * group-view override) are inert / a typed 503.
+   */
+  readonly covenantOverride?: FaithfulCovenantOverrideStore;
+  /**
+   * Optional faithful-mode reconcile-divergence injection (Story 9.5, FR-32) the `POST
+   * /positions/reconcile` route consults so the NEXT run reports-and-corrects a divergence through the
+   * REAL Story-8.5 reconcile-and-correct path (journaled). Drives `GET/PUT
+   * /operator/reconcile-divergence`; absent on a non-faithful deployment ⇒ those routes are a typed 503.
+   */
+  readonly reconcileInjection?: FaithfulReconcileInjectionStore;
   /** Optional OpenAPI metadata override. */
   readonly openApiInfo?: OpenApiInfo;
   /** Optional Fastify logger toggle (defaults off — tests stay quiet). */
@@ -240,6 +266,7 @@ export async function buildApp(deps: ApiDeps, ext?: BuildAppExtensions): Promise
   await app.register(strategyRoutes(deps));
   await app.register(simulationRoutes(deps));
   await app.register(faithfulOnboardingRoutes(deps));
+  await app.register(operatorRoutes(deps));
 
   await app.ready();
   return app;

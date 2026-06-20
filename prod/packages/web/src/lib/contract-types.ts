@@ -3,9 +3,13 @@
 // browser bundle). Nested shapes are reached by indexed access so nothing is redefined here.
 import type {
   CoupledPairResponse,
+  FaithfulConfirmationSettingsUpdate,
+  FaithfulConfirmationSettingsView,
   GroupViewResponse,
   OnboardingRequest,
   OnboardingState,
+  OperatorInjectionState,
+  OperatorInjectionUpdate,
   PositionMarkResponse,
   PositionResponse,
   PositionsResponse,
@@ -18,9 +22,13 @@ import type {
 
 export type {
   CoupledPairResponse,
+  FaithfulConfirmationSettingsUpdate,
+  FaithfulConfirmationSettingsView,
   GroupViewResponse,
   OnboardingRequest,
   OnboardingState,
+  OperatorInjectionState,
+  OperatorInjectionUpdate,
   PositionMarkResponse,
   PositionResponse,
   PositionsResponse,

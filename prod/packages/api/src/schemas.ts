@@ -849,3 +849,65 @@ export const OnboardingStateSchema = z
 /** The inferred wire types for the onboarding surface. */
 export type OnboardingRequest = z.infer<typeof OnboardingRequestSchema>;
 export type OnboardingState = z.infer<typeof OnboardingStateSchema>;
+
+// ─── Operator control panel (Story 9.5, FR-32) ───────────────────────────────────────────────────
+// The faithful-mode operator injection surface: confirmation latency/failure (wired to Story 9.1),
+// covenant-breach injection, and reconcile-divergence injection. Composed ONLY in ENGINE_MODE=faithful;
+// a non-faithful / read-only deployment returns a typed 503 (mirrors the paper-gated simulation routes).
+
+/** The inclusive validation bounds for the faithful confirmation settings (surfaced so the UI builds controls). */
+export const FaithfulConfirmationBoundsSchema = z
+  .object({
+    latencyMsMin: z.number().int(),
+    latencyMsMax: z.number().int(),
+    failureRateMin: z.number(),
+    failureRateMax: z.number(),
+  })
+  .describe('Inclusive bounds the faithful confirmation settings are validated against.');
+
+/** The current faithful confirmation settings + monotonic version + bounds (the operator read view). */
+export const FaithfulConfirmationSettingsViewSchema = z
+  .object({
+    latencyMs: z.number().int(),
+    failureRate: z.number(),
+    failNext: z.boolean(),
+    version: z.number().int(),
+    bounds: FaithfulConfirmationBoundsSchema,
+  })
+  .describe(
+    'Faithful async-confirmation transport settings: realistic latency, failure rate, and a "fail next" one-shot.',
+  );
+
+/** A partial update to the faithful confirmation settings — any provided field is validated fail-closed. */
+export const FaithfulConfirmationSettingsUpdateSchema = z
+  .object({
+    latencyMs: z.number().optional(),
+    failureRate: z.number().optional(),
+    failNext: z.boolean().optional(),
+  })
+  .describe(
+    'Patch the faithful confirmation settings (any subset). Out-of-range ⇒ 400 fail-closed.',
+  );
+
+/** The body of a covenant-breach / reconcile-divergence injection toggle (fail-closed boolean). */
+export const OperatorInjectionUpdateSchema = z
+  .object({ active: z.boolean() })
+  .describe('Set whether the operator injection is active (true) or cleared (false).');
+
+/** The state of an operator injection toggle: whether it is active + the store monotonic version. */
+export const OperatorInjectionStateSchema = z
+  .object({
+    active: z.boolean(),
+    version: z.number().int(),
+  })
+  .describe('The operator injection toggle state (active + monotonic version).');
+
+/** The inferred wire types for the operator control panel. */
+export type FaithfulConfirmationSettingsView = z.infer<
+  typeof FaithfulConfirmationSettingsViewSchema
+>;
+export type FaithfulConfirmationSettingsUpdate = z.infer<
+  typeof FaithfulConfirmationSettingsUpdateSchema
+>;
+export type OperatorInjectionUpdate = z.infer<typeof OperatorInjectionUpdateSchema>;
+export type OperatorInjectionState = z.infer<typeof OperatorInjectionStateSchema>;

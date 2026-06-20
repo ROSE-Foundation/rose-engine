@@ -481,6 +481,109 @@ function validateCorrectionAccounts(
   }
 }
 
+/**
+ * Builds a faithful-mode OPERATOR-injected divergence plan (Story 9.5, FR-32) so the NEXT
+ * `reconcilePositionsToPairs` run REPORTS-AND-CORRECTS a genuine position↔pair divergence through the
+ * SAME real Story-8.5 path — no fake report. It picks an OPEN position (preferring the pair with the
+ * FEWEST open positions, so a multi-leg D1 topology is left intact), injects a `chainClosedPairs` fact
+ * for its pair, and supplies a balanced claim/contra correction-account mapping (two DISTINCT accounts
+ * sharing one (asset, scale)) for every side that pair carries — so the induced mismatch is fully
+ * correctable (journaled void + OPEN→CLOSED flip), never left silent. Returns `null` when no OPEN
+ * position or no suitable correction-account pair exists (the caller then reconciles cleanly). It WRITES
+ * nothing itself — the correction is posted by `reconcilePositionsToPairs` (the one journaling path).
+ */
+export async function buildInjectedDivergencePlan(
+  db: RoseDb,
+  opts: { now?: Date } = {},
+): Promise<PositionReconcilePlan | null> {
+  // 1. Every OPEN position (deterministic order), grouped by pair so we can pick the least-entangled pair.
+  const openPositions = await db
+    .select({
+      coupledPairId: positions.coupledPairId,
+      side: positions.side,
+    })
+    .from(positions)
+    .where(eq(positions.lifecycle, 'OPEN'))
+    .orderBy(positions.coupledPairId, positions.side, positions.createdAt);
+  if (openPositions.length === 0) {
+    return null;
+  }
+  const byPair = new Map<string, Set<PositionSide>>();
+  const countByPair = new Map<string, number>();
+  for (const p of openPositions) {
+    countByPair.set(p.coupledPairId, (countByPair.get(p.coupledPairId) ?? 0) + 1);
+    const set = byPair.get(p.coupledPairId) ?? new Set<PositionSide>();
+    set.add(p.side);
+    byPair.set(p.coupledPairId, set);
+  }
+  // Prefer the pair with the FEWEST open positions (tie-break by pair id, ascending) — for the seeded
+  // demo this is the single-owner solo pair, so the headline D1 (LONG+SHORT) topology stays intact.
+  const targetPairId = [...countByPair.entries()].sort(
+    (a, b) => a[1] - b[1] || (a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0),
+  )[0]![0];
+  const targetSides = [...(byPair.get(targetPairId) ?? new Set<PositionSide>())].sort();
+
+  // 2. A balanced correction-account pair: two DISTINCT accounts sharing ONE (asset, scale) so the void
+  //    entry balances per (asset, scale). Prefer a CLIENT_COLLATERAL claim (a user's recorded claim,
+  //    DEBITed to void) + a non-client contra (CREDITed), else any two same-denomination accounts.
+  const accountRows = await db
+    .select({
+      id: accounts.id,
+      type: accounts.type,
+      asset: accounts.asset,
+      scale: accounts.decimalScale,
+    })
+    .from(accounts);
+  const byDenom = new Map<string, Array<(typeof accountRows)[number]>>();
+  for (const a of accountRows) {
+    const key = `${a.asset}|${a.scale}`;
+    const group = byDenom.get(key) ?? [];
+    group.push(a);
+    byDenom.set(key, group);
+  }
+  let claim: (typeof accountRows)[number] | undefined;
+  let contra: (typeof accountRows)[number] | undefined;
+  for (const group of byDenom.values()) {
+    if (group.length < 2) continue;
+    const client = group.find((a) => a.type === 'CLIENT_COLLATERAL');
+    if (client) {
+      const other = group.find((a) => a.id !== client.id);
+      if (other) {
+        claim = client;
+        contra = other;
+        break;
+      }
+    }
+    // Remember a fallback (any two distinct same-denom accounts) in case no CLIENT_COLLATERAL group exists.
+    if (!claim) {
+      claim = group[0];
+      contra = group[1];
+    }
+  }
+  if (!claim || !contra) {
+    return null;
+  }
+
+  const corrections: PositionClaimCorrectionAccounts[] = targetSides.map((side) => ({
+    coupledPairId: targetPairId,
+    side,
+    asset: claim!.asset,
+    scale: claim!.scale,
+    claimAccountId: claim!.id,
+    contraAccountId: contra!.id,
+  }));
+
+  const plan: PositionReconcilePlan = {
+    chainClosedPairs: [{ coupledPairId: targetPairId }],
+    corrections,
+    description:
+      `operator-injected divergence (Story 9.5, FR-32): pair ${targetPairId} reported closed on chain ` +
+      `while an off-chain position is still OPEN — reconcile corrects toward the chain (journaled, not silent)`,
+    ...(opts.now ? { now: opts.now } : {}),
+  };
+  return plan;
+}
+
 /** Returns the report as a plain object ready for `JSON.stringify` (already free of bigint/float). */
 export function positionReconciliationReportToJson(
   report: PositionReconciliationReport,

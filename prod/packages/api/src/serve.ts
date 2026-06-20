@@ -39,6 +39,8 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildApp, type ApiDeps, type MarkTrustInputs } from './app.js';
 import { makeFaithfulConfirmationSettingsStore } from './faithful/confirmation-settings.js';
 import { FaithfulConfirmationTransport, realScheduler } from './faithful/confirmation-transport.js';
+import { makeFaithfulCovenantOverrideStore } from './faithful/covenant-override.js';
+import { makeFaithfulReconcileInjectionStore } from './faithful/reconcile-injection.js';
 import {
   FAITHFUL_MODE_BANNER,
   makeFaithfulModeServices,
@@ -333,6 +335,12 @@ async function main(): Promise<void> {
     // The price oracle (Lever 1 replay) + simulation settings + read surfaces stay EXACTLY as in paper —
     // faithful only time-shifts the confirmation commit point and can inject failures.
     const simulationSettings = makeSimulationSettingsStore();
+    // The Story-9.5 operator control panel injections: the covenant-breach override (consulted by the
+    // REAL group-view covenant computation) + the reconcile-divergence toggle (consulted by the REAL
+    // Story-8.5 reconcile-and-correct path). The confirmation-settings store created above is the SAME
+    // one the async transport consumes — the operator panel tunes a single source of truth (Story 9.1).
+    const covenantOverride = makeFaithfulCovenantOverrideStore();
+    const reconcileInjection = makeFaithfulReconcileInjectionStore();
     deps = {
       db,
       logger: true,
@@ -346,6 +354,10 @@ async function main(): Promise<void> {
       markTrust: PAPER_MARK_TRUST,
       // Expose the mock KYC registry so the faithful-gated onboarding route can drive it (Story 9.2).
       kycRegistry,
+      // Expose the Story-9.5 operator injections (latency/failure, covenant breach, reconcile divergence).
+      confirmationSettings,
+      covenantOverride,
+      reconcileInjection,
     };
     console.log(
       '[serve] faithful mode ACTIVE — subscribe/redeem/strategy + position open/close are fully ' +

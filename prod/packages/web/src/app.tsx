@@ -14,6 +14,7 @@ import { CoupledPairSurface } from './surfaces/coupled-pair/coupled-pair.js';
 import { CovenantConsole } from './surfaces/covenant-console/covenant-console.js';
 import { ExchangeTrading } from './surfaces/exchange-trading/exchange-trading.js';
 import { Home } from './surfaces/home/home.js';
+import { OperatorPanel } from './surfaces/operator/operator-panel.js';
 import { SimulationSurface } from './surfaces/simulation/simulation.js';
 import { SubscriberSurface } from './surfaces/subscriber/subscriber.js';
 
@@ -24,6 +25,7 @@ type Surface =
   | 'exchange-trading'
   | 'subscriber'
   | 'simulation'
+  | 'operator'
   | 'delta-engine';
 
 // Topnav surfaces (Home is reached via the logo mark, per the mocks). Labels follow index.html.
@@ -35,8 +37,12 @@ const NAV_SURFACES: readonly Surface[] = [
   'coupled-pair',
   'subscriber',
   'simulation',
+  'operator',
   'delta-engine',
 ];
+
+// Operator-only nav surfaces (Story 9.3 role gate): a subscriber / signed-out visitor never sees them.
+const OPERATOR_ONLY_SURFACES: readonly Surface[] = ['simulation', 'operator'];
 
 const SURFACE_LABELS: Record<Surface, string> = {
   home: 'Home',
@@ -45,6 +51,7 @@ const SURFACE_LABELS: Record<Surface, string> = {
   'exchange-trading': 'Exchange',
   subscriber: 'Subscriber',
   simulation: 'Simulation',
+  operator: 'Operator',
   'delta-engine': 'Delta Engine',
 };
 
@@ -76,11 +83,14 @@ function SubscriberPanel({ subscriberAddress }: { subscriberAddress: string }): 
 
 /**
  * The nav surfaces a given identity may see (Story 9.3 role gate): an operator sees everything; a
- * subscriber (or a signed-out visitor) does NOT see the operator-only Simulation tab. Exchange +
- * Subscriber stay in the nav for the signed-out visitor but fail closed to a "sign in first" state.
+ * subscriber (or a signed-out visitor) does NOT see the operator-only Simulation / Operator tabs.
+ * Exchange + Subscriber stay in the nav for the signed-out visitor but fail closed to a "sign in
+ * first" state.
  */
 function navSurfacesFor(isOperator: boolean): readonly Surface[] {
-  return isOperator ? NAV_SURFACES : NAV_SURFACES.filter((s) => s !== 'simulation');
+  return isOperator
+    ? NAV_SURFACES
+    : NAV_SURFACES.filter((s) => !OPERATOR_ONLY_SURFACES.includes(s));
 }
 
 export function Shell(): React.JSX.Element {
@@ -147,6 +157,14 @@ export function Shell(): React.JSX.Element {
             <SimulationSurface />
           ) : (
             <SignInRequired surface="Simulation" operatorOnly />
+          ))}
+        {/* The Operator panel is an operator surface — gated even if the surface state lingers after a
+            switch to a non-operator identity. */}
+        {surface === 'operator' &&
+          (isOperator ? (
+            <OperatorPanel />
+          ) : (
+            <SignInRequired surface="the Operator panel" operatorOnly />
           ))}
         {surface === 'delta-engine' && <DeltaEngineSurface />}
       </main>

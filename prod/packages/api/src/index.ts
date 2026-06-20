@@ -76,6 +76,26 @@ export {
   OnboardingStateSchema,
 } from './schemas.js';
 
+// Operator control panel (Story 9.5, FR-32): the faithful-mode covenant-breach + reconcile-divergence
+// injection stores + the operator wire schemas/types (so the web operator surface binds to the SAME
+// single-source contract types via a fully-erased `import type`).
+export {
+  makeFaithfulCovenantOverrideStore,
+  type FaithfulCovenantOverrideStore,
+  type FaithfulCovenantOverrideState,
+} from './faithful/covenant-override.js';
+export {
+  makeFaithfulReconcileInjectionStore,
+  type FaithfulReconcileInjectionStore,
+  type FaithfulReconcileInjectionState,
+} from './faithful/reconcile-injection.js';
+export type {
+  FaithfulConfirmationSettingsView,
+  FaithfulConfirmationSettingsUpdate,
+  OperatorInjectionState,
+  OperatorInjectionUpdate,
+} from './schemas.js';
+
 export {
   AccountTypeSchema,
   CoupledPairSchema,

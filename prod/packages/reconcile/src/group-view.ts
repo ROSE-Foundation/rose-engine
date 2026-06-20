@@ -251,8 +251,52 @@ export interface BuildGroupViewOptions {
    * `@rose/reconcile` never reads env, mirroring the `chainSupplies` injection.
    */
   readonly covenantThresholds?: CovenantThresholds;
+  /**
+   * Faithful-mode operator override (Story 9.5, FR-32): when true, the covenant monitor genuinely
+   * reports a BREACH on the backing-float-floor covenant by computing the LIVE backing ratio against a
+   * documented stress floor threshold (`FORCE_BREACH_FLOOR_THRESHOLD`) through the real
+   * `covenantStatus` path — not a cosmetic label (`currentBps` stays a real ledger ratio). The ratio's
+   * denominator is the dominant asset's gross balance-sheet FOOTING (assets + liabilities), a
+   * GUARANTEED-POSITIVE quantity, so the forced row is a genuine BREACH (never NA) EVEN when group NAV
+   * is 0/degenerate — the seeded faithful demo has assets ≈ liabilities ⇒ NAV ≈ 0, which a NAV
+   * denominator would read as NA. Self-contained: a BREACH row is emitted even when no
+   * `covenantThresholds` are configured. Cleared by the operator (consulted per request). Inert in
+   * `paper`/read-only (never set).
+   */
+  readonly forceCovenantBreach?: boolean;
   /** Injected clock for a deterministic `generatedAt` (tests). Defaults to `new Date()`. */
   readonly now?: Date;
+}
+
+/**
+ * The stress floor threshold the Story-9.5 covenant-breach injection computes the backing-float-floor
+ * covenant against: a 1,000,000% backing requirement no finite positive live ratio can satisfy, so
+ * `covenantStatus` genuinely derives BREACH from the real `currentBps`. The forced row uses the gross
+ * balance-sheet footing (assets + liabilities) as its denominator, which is positive whenever any
+ * balance exists, so the BREACH holds even when group NAV is 0 (assets ≈ liabilities) — see
+ * `forcedBreachFloorCovenant`.
+ */
+export const FORCE_BREACH_FLOOR_THRESHOLD = '1000000';
+
+/**
+ * Build the Story-9.5 operator force-breach backing-float-floor covenant: a GENUINE BREACH derived
+ * through the real `covenantStatus`, computed against a guaranteed-positive denominator — the dominant
+ * asset's gross balance-sheet FOOTING (assets + liabilities) — so it breaches even when group NAV is
+ * 0/degenerate (the seeded faithful demo has assets ≈ liabilities ⇒ NAV ≈ 0, which a NAV denominator
+ * reads as NA). `currentBps` stays the REAL backing/footing ratio; a degenerate empty footing reads as
+ * 0 backing against an impossible floor. Either way the floor is BREACH by construction (never NA).
+ */
+function forcedBreachFloorCovenant(backing: bigint, footing: bigint): CovenantView {
+  const thresholdBps = ratioToBps(FORCE_BREACH_FLOOR_THRESHOLD);
+  const currentBps = footing > 0n ? Number((backing * 10000n) / footing) : 0;
+  return Object.freeze({
+    key: 'backing-float-floor',
+    label: 'Backing-float floor',
+    kind: 'floor' as const,
+    thresholdBps,
+    currentBps,
+    status: covenantStatus('floor', currentBps, thresholdBps),
+  });
 }
 
 // Parse a NUMERIC string to a bigint, rejecting a real fractional part — the established
@@ -604,7 +648,9 @@ export async function buildGroupView(
     (best, b) => (best === undefined || navMagnitude(b) > navMagnitude(best) ? b : best),
     undefined,
   );
-  if (opts.covenantThresholds && dominant !== undefined) {
+  // Compute the monitor when thresholds are configured OR the Story-9.5 breach injection is active
+  // (the injection is self-contained — it emits a genuine BREACH row even with no configured monitor).
+  if ((opts.covenantThresholds || opts.forceCovenantBreach) && dominant !== undefined) {
     let backing = 0n;
     let deployed = 0n;
     let clientLiability = 0n;
@@ -618,34 +664,45 @@ export async function buildGroupView(
     }
     const nav = dominant.assets - dominant.liabilities;
     const th = opts.covenantThresholds;
-    covenants.push(
-      computeCovenant(
-        'backing-float-floor',
-        'Backing-float floor',
-        'floor',
-        backing,
-        nav,
-        th.backingFloatFloor,
-      ),
-      computeCovenant(
-        'deploy-ratio-ceiling',
-        'Deploy ratio (ceiling)',
-        'ceiling',
-        deployed,
-        nav,
-        th.deployCeiling,
-      ),
-      // Client-collateral coverage: group assets must cover client claims ≥ 100% (clients always made
-      // whole). Honestly computed from existing classifications (NO segregated-asset sub-ledger exists).
-      computeCovenant(
-        'client-collateral-coverage',
-        'Client-collateral coverage',
-        'floor',
-        dominant.assets,
-        clientLiability,
-        th.clientCollateralRatio,
-      ),
-    );
+    // The backing-float-floor row: when the operator breach injection is active it is a GENUINE BREACH
+    // computed against a guaranteed-positive footing (so it breaches even at NAV ≈ 0 — see
+    // `forcedBreachFloorCovenant`); otherwise it is the configured floor computed against NAV.
+    if (opts.forceCovenantBreach) {
+      covenants.push(forcedBreachFloorCovenant(backing, dominant.assets + dominant.liabilities));
+    } else if (th?.backingFloatFloor !== undefined) {
+      covenants.push(
+        computeCovenant(
+          'backing-float-floor',
+          'Backing-float floor',
+          'floor',
+          backing,
+          nav,
+          th.backingFloatFloor,
+        ),
+      );
+    }
+    if (th) {
+      covenants.push(
+        computeCovenant(
+          'deploy-ratio-ceiling',
+          'Deploy ratio (ceiling)',
+          'ceiling',
+          deployed,
+          nav,
+          th.deployCeiling,
+        ),
+        // Client-collateral coverage: group assets must cover client claims ≥ 100% (clients always made
+        // whole). Honestly computed from existing classifications (NO segregated-asset sub-ledger exists).
+        computeCovenant(
+          'client-collateral-coverage',
+          'Client-collateral coverage',
+          'floor',
+          dominant.assets,
+          clientLiability,
+          th.clientCollateralRatio,
+        ),
+      );
+    }
   }
 
   // Coupled-pair positions + note embedding.

@@ -11,6 +11,7 @@
 // typed 503 (never silently default a trust bound).
 import { getCoupledPair } from '@rose/ledger';
 import {
+  buildInjectedDivergencePlan,
   listPositionsByOwner,
   reconcilePositionsToPairs,
   type PositionService,
@@ -260,20 +261,26 @@ export function positionRoutes(deps: ApiDeps): FastifyPluginAsyncZod {
     );
 
     // ─── Operator: position ↔ pair reconciliation (Story 8.5, FR-27) ──────────────────────────────
-    // A pure per-(pair, side) residual-backing + mismatch REPORT (called with NO chain-closed facts,
-    // so it posts NO correcting entries). Gated on the position service being composed (paper-only).
+    // A per-(pair, side) residual-backing + mismatch report. Normally called with NO chain-closed facts
+    // (report-only, posts NO correcting entries). When the faithful operator reconcile-divergence
+    // injection is ARMED (Story 9.5, FR-32), a plan is built from the live DB so THIS run reports-and-
+    // corrects a genuine divergence through the SAME path (journaled, surfaced — NFR-3). Gated on the
+    // position service being composed (paper/faithful only).
     app.post(
       '/positions/reconcile',
       {
         schema: {
-          summary: 'Operator position↔pair reconciliation report (report-only)',
+          summary: 'Operator position↔pair reconciliation report (report-and-correct)',
           tags: ['read'],
           response: { 200: PositionReconciliationReportSchema, 503: ErrorResponseSchema },
         },
       },
       async () => {
         requirePositionService(deps);
-        const report = await reconcilePositionsToPairs(deps.db, {});
+        const injected = deps.reconcileInjection?.get().active
+          ? await buildInjectedDivergencePlan(deps.db)
+          : null;
+        const report = await reconcilePositionsToPairs(deps.db, injected ?? {});
         return serializePositionReconciliationReport(report);
       },
     );

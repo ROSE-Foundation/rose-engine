@@ -122,6 +122,6 @@ development_status:
   9-2-default-deny-authorization-mocked-kyc-onboarding: done
   9-3-session-identity-multi-user: done
   9-4-mock-counterparty-inventory-adapter-single-side-close: done
-  9-5-operator-control-panel-prodlike-events: backlog
+  9-5-operator-control-panel-prodlike-events: done
   9-6-production-faithful-composition-banner-deploy: backlog
   epic-9-retrospective: optional

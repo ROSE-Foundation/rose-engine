@@ -20,6 +20,7 @@ import {
 } from '@rose/ledger';
 import { createPosition, getPosition } from './repositories/positions.js';
 import {
+  buildInjectedDivergencePlan,
   InvalidPositionCorrectionAccountsError,
   reconcilePositionsToPairs,
   serializePositionReconciliationReport,
@@ -390,6 +391,71 @@ describe('position ↔ pair mismatch corrected toward the chain — journaled + 
         ],
       }),
     ).rejects.toBeInstanceOf(InvalidPositionCorrectionAccountsError);
+  });
+});
+
+describe('operator-injected divergence plan (Story 9.5, FR-32)', () => {
+  it('returns null when there is no OPEN position to diverge', async () => {
+    await mkAccount('CLIENT_COLLATERAL', 'EUR', 2);
+    await mkAccount('BACKING_FLOAT', 'EUR', 2);
+    expect(await buildInjectedDivergencePlan(db)).toBeNull();
+  });
+
+  it('builds a plan whose reconcile REPORTS-AND-CORRECTS the divergence (journaled void + OPEN→CLOSED)', async () => {
+    const claim = await mkAccount('CLIENT_COLLATERAL', 'EUR', 2);
+    const contra = await mkAccount('BACKING_FLOAT', 'EUR', 2);
+    const pairId = await seedPair({ longLeg: 500_000n, shortLeg: 500_000n });
+    const positionId = await openPosition(pairId, 'LONG', 100_000n);
+
+    const plan = await buildInjectedDivergencePlan(db, { now: NOW });
+    expect(plan).not.toBeNull();
+    // The plan injects the pair as chain-closed + supplies a balanced claim/contra correction mapping.
+    expect(plan!.chainClosedPairs).toEqual([{ coupledPairId: pairId }]);
+    const corr = plan!.corrections!.find((c) => c.side === 'LONG')!;
+    expect(corr.claimAccountId).toBe(claim);
+    expect(corr.contraAccountId).toBe(contra);
+
+    const before = await countEntries();
+    const report = await reconcilePositionsToPairs(db, plan!);
+
+    // The divergence is reported AND corrected toward the chain — journaled, surfaced, never silent.
+    expect(report.anyMismatch).toBe(true);
+    expect(report.anyCorrected).toBe(true);
+    expect(report.corrections).toBe(1);
+    const mismatch = report.mismatches.find((m) => m.positionId === positionId)!;
+    expect(mismatch.corrected).toBe(true);
+    expect(mismatch.journalEntryId).not.toBeNull();
+    expect(mismatch.voidedCollateral).toBe('100000');
+
+    // A balanced correcting entry was posted (journaled) and the position is now CLOSED.
+    expect(await countEntries()).toBe(before + 1);
+    expect((await getPosition(db, positionId))!.lifecycle).toBe('CLOSED');
+
+    // After the correction the position is no longer OPEN ⇒ a re-run finds no further divergence.
+    expect(await buildInjectedDivergencePlan(db)).toBeNull();
+  });
+
+  it('targets the pair with the FEWEST open positions (leaves a multi-leg topology intact)', async () => {
+    await mkAccount('CLIENT_COLLATERAL', 'EUR', 2);
+    await mkAccount('BACKING_FLOAT', 'EUR', 2);
+    // Pair A (D1 topology): LONG + SHORT (2 open). Pair B (solo): a single LONG.
+    const pairA = await seedPair({
+      referenceAsset: 'EUR/USD',
+      longLeg: 500_000n,
+      shortLeg: 500_000n,
+    });
+    await openPosition(pairA, 'LONG', 100_000n);
+    await openPosition(pairA, 'SHORT', 100_000n);
+    const pairB = await seedPair({
+      referenceAsset: 'GBP/USD',
+      longLeg: 500_000n,
+      shortLeg: 500_000n,
+    });
+    await openPosition(pairB, 'LONG', 100_000n, 'subscriber-1', 'GBP/USD');
+
+    const plan = await buildInjectedDivergencePlan(db);
+    // The solo pair (fewest open positions) is the target — the D1 pair is left intact.
+    expect(plan!.chainClosedPairs).toEqual([{ coupledPairId: pairB }]);
   });
 });
 

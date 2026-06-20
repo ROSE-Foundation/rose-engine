@@ -11,11 +11,15 @@ import type {
   ClosePositionRequest,
   ClosePositionView,
   CoupledPairResponse,
+  FaithfulConfirmationSettingsUpdate,
+  FaithfulConfirmationSettingsView,
   GroupViewResponse,
   OnboardingRequest,
   OnboardingState,
   OpenPositionRequest,
   OpenPositionView,
+  OperatorInjectionState,
+  OperatorInjectionUpdate,
   PositionReconciliationReport,
   PositionsResponse,
   RedeemRequest,
@@ -285,6 +289,104 @@ export function useSetOnboarding(): UseMutationResult<OnboardingState, Error, On
         queryClient.invalidateQueries({ queryKey: ['onboarding', state.address] }),
         queryClient.invalidateQueries({ queryKey: ['positions'] }),
       ]);
+    },
+  });
+}
+
+// ─── Operator control panel (Story 9.5, FR-32) — faithful-mode injections ─────────────────────────
+
+/**
+ * Live faithful async-confirmation settings (latency + failure injection) the operator panel tunes.
+ * A non-faithful / read-only deployment surfaces a typed 503 `OPERATOR_CONFIRMATION_UNAVAILABLE` the
+ * panel NAMES (degrades to a clean "not available on this deployment" state). No retry on the refusal.
+ */
+export function useConfirmationSettings(): UseQueryResult<FaithfulConfirmationSettingsView, Error> {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['operator-confirmation'],
+    queryFn: () => client.getConfirmationSettings(),
+    retry: false,
+  });
+}
+
+/**
+ * Inject confirmation latency / failure-rate / a "fail next" one-shot (any subset). On success the
+ * settings are invalidated so the panel re-reads the new version. A 400 (out-of-range) / 503
+ * (non-faithful) surfaces as a typed `ApiClientError` the panel NAMES (UX-DR5).
+ */
+export function useUpdateConfirmationSettings(): UseMutationResult<
+  FaithfulConfirmationSettingsView,
+  Error,
+  FaithfulConfirmationSettingsUpdate
+> {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (patch) => client.updateConfirmationSettings(patch),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['operator-confirmation'] });
+    },
+  });
+}
+
+/** Live covenant-breach injection state. Non-faithful ⇒ typed 503 the panel NAMES. No retry. */
+export function useCovenantBreach(): UseQueryResult<OperatorInjectionState, Error> {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['operator-covenant-breach'],
+    queryFn: () => client.getCovenantBreach(),
+    retry: false,
+  });
+}
+
+/**
+ * Force / clear a genuine covenant BREACH on the group-view monitor. On success the injection state
+ * AND the live group view (the covenant monitor reads the override) are invalidated. A 503 surfaces
+ * as a typed `ApiClientError`.
+ */
+export function useSetCovenantBreach(): UseMutationResult<
+  OperatorInjectionState,
+  Error,
+  OperatorInjectionUpdate
+> {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => client.setCovenantBreach(body),
+    onSuccess: async () => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['operator-covenant-breach'] }),
+        queryClient.invalidateQueries({ queryKey: ['group-view'] }),
+      ]);
+    },
+  });
+}
+
+/** Live reconcile-divergence injection state. Non-faithful ⇒ typed 503 the panel NAMES. No retry. */
+export function useReconcileDivergence(): UseQueryResult<OperatorInjectionState, Error> {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['operator-reconcile-divergence'],
+    queryFn: () => client.getReconcileDivergence(),
+    retry: false,
+  });
+}
+
+/**
+ * Arm / clear a position↔pair reconciliation divergence on the next reconcile. On success the
+ * injection state is invalidated. A 503 surfaces as a typed `ApiClientError` the panel NAMES.
+ */
+export function useSetReconcileDivergence(): UseMutationResult<
+  OperatorInjectionState,
+  Error,
+  OperatorInjectionUpdate
+> {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => client.setReconcileDivergence(body),
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['operator-reconcile-divergence'] });
     },
   });
 }

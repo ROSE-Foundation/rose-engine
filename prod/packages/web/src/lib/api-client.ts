@@ -2,11 +2,15 @@ import type {
   ClosePositionRequest,
   ClosePositionView,
   CoupledPairResponse,
+  FaithfulConfirmationSettingsUpdate,
+  FaithfulConfirmationSettingsView,
   GroupViewResponse,
   OnboardingRequest,
   OnboardingState,
   OpenPositionRequest,
   OpenPositionView,
+  OperatorInjectionState,
+  OperatorInjectionUpdate,
   PositionReconciliationReport,
   PositionsResponse,
   RedeemRequest,
@@ -87,6 +91,27 @@ export interface ApiClient {
    * a non-faithful deployment ⇒ 503.
    */
   setOnboarding(body: OnboardingRequest): Promise<OnboardingState>;
+  // ─── Operator control panel (Story 9.5, FR-32) — faithful-mode injections ─────────────────────
+  /**
+   * Read the faithful async-confirmation settings the operator panel tunes (latency + failure
+   * injection). A non-faithful deployment refuses with a typed 503 `OPERATOR_CONFIRMATION_UNAVAILABLE`.
+   */
+  getConfirmationSettings(): Promise<FaithfulConfirmationSettingsView>;
+  /**
+   * Inject a confirmation latency / failure-rate / "fail next" one-shot (any subset). Out-of-range ⇒
+   * a typed 400 `FaithfulConfirmationSettingsError`; a non-faithful deployment ⇒ 503.
+   */
+  updateConfirmationSettings(
+    patch: FaithfulConfirmationSettingsUpdate,
+  ): Promise<FaithfulConfirmationSettingsView>;
+  /** Read the covenant-breach injection state. Non-faithful ⇒ 503 `OPERATOR_COVENANT_UNAVAILABLE`. */
+  getCovenantBreach(): Promise<OperatorInjectionState>;
+  /** Force / clear a genuine covenant BREACH on the group-view monitor. Non-faithful ⇒ 503. */
+  setCovenantBreach(body: OperatorInjectionUpdate): Promise<OperatorInjectionState>;
+  /** Read the reconcile-divergence injection state. Non-faithful ⇒ 503 `OPERATOR_RECONCILE_UNAVAILABLE`. */
+  getReconcileDivergence(): Promise<OperatorInjectionState>;
+  /** Arm / clear a position↔pair reconciliation divergence on the next reconcile. Non-faithful ⇒ 503. */
+  setReconcileDivergence(body: OperatorInjectionUpdate): Promise<OperatorInjectionState>;
 }
 
 /** The structured error envelope the boundary returns (`{ error: { code, message } }`). */
@@ -181,6 +206,15 @@ export function createApiClient({
     getOnboardingState: (address: string) =>
       get<OnboardingState>(`/faithful/onboarding/${enc(address)}`),
     setOnboarding: (body: OnboardingRequest) => post<OnboardingState>('/faithful/onboarding', body),
+    getConfirmationSettings: () => get<FaithfulConfirmationSettingsView>('/operator/confirmation'),
+    updateConfirmationSettings: (patch: FaithfulConfirmationSettingsUpdate) =>
+      put<FaithfulConfirmationSettingsView>('/operator/confirmation', patch),
+    getCovenantBreach: () => get<OperatorInjectionState>('/operator/covenant-breach'),
+    setCovenantBreach: (body: OperatorInjectionUpdate) =>
+      put<OperatorInjectionState>('/operator/covenant-breach', body),
+    getReconcileDivergence: () => get<OperatorInjectionState>('/operator/reconcile-divergence'),
+    setReconcileDivergence: (body: OperatorInjectionUpdate) =>
+      put<OperatorInjectionState>('/operator/reconcile-divergence', body),
   };
 }
 

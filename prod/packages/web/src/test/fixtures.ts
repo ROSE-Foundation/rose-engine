@@ -5,11 +5,13 @@ import { ApiClientError } from '../lib/api-client.js';
 import type {
   ClosePositionView,
   CoupledPairResponse,
+  FaithfulConfirmationSettingsView,
   FlowPosition,
   GroupViewEntity,
   GroupViewResponse,
   Money,
   OpenPositionView,
+  OperatorInjectionState,
   Position,
   PositionMark,
   PositionReconciliationReport,
@@ -615,4 +617,69 @@ export function reconciliationReport(): PositionReconciliationReport {
     anyCorrected: false,
     corrections: 0,
   };
+}
+
+// ─── Operator control panel (Story 9.5, FR-32) — faithful-mode injection fixtures ───────────────
+
+/** The faithful async-confirmation settings (`GET /operator/confirmation` shape): defaults + bounds. */
+export function confirmationSettings(
+  overrides: Partial<FaithfulConfirmationSettingsView> = {},
+): FaithfulConfirmationSettingsView {
+  return {
+    latencyMs: 2000,
+    failureRate: 0,
+    failNext: false,
+    version: 0,
+    bounds: {
+      latencyMsMin: 0,
+      latencyMsMax: 600000,
+      failureRateMin: 0,
+      failureRateMax: 1,
+    },
+    ...overrides,
+  };
+}
+
+/** An operator-injection toggle state (covenant-breach / reconcile-divergence) at the given version. */
+export function operatorInjectionState(
+  active: boolean,
+  version = active ? 1 : 0,
+): OperatorInjectionState {
+  return { active, version };
+}
+
+/** The 400 out-of-range refusal for a confirmation-settings patch (UX-DR5, rule-named). */
+export function confirmationSettingsRangeError(): ApiClientError {
+  return new ApiClientError(
+    'FaithfulConfirmationSettingsError',
+    'failureRate must be within [0, 1] (got 5).',
+    400,
+  );
+}
+
+/** A 503 refuse-if-absent error for the operator confirmation control (non-faithful deployment). */
+export function operatorConfirmationUnavailableError(): ApiClientError {
+  return new ApiClientError(
+    'OPERATOR_CONFIRMATION_UNAVAILABLE',
+    'The operator confirmation-settings control is not configured on this deployment.',
+    503,
+  );
+}
+
+/** A 503 refuse-if-absent error for the operator covenant-breach control (non-faithful deployment). */
+export function operatorCovenantUnavailableError(): ApiClientError {
+  return new ApiClientError(
+    'OPERATOR_COVENANT_UNAVAILABLE',
+    'The operator covenant-breach injection is not configured on this deployment.',
+    503,
+  );
+}
+
+/** A 503 refuse-if-absent error for the operator reconcile-divergence control (non-faithful deployment). */
+export function operatorReconcileUnavailableError(): ApiClientError {
+  return new ApiClientError(
+    'OPERATOR_RECONCILE_UNAVAILABLE',
+    'The operator reconcile-divergence injection is not configured on this deployment.',
+    503,
+  );
 }

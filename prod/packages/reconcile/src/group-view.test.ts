@@ -379,6 +379,81 @@ describe('buildGroupView — Treasury Dashboard enrichment', () => {
     expect(floor.status).toBe('BREACH');
   });
 
+  it('forceCovenantBreach (Story 9.5) reports a GENUINE backing-float-floor BREACH via the real path; clearing returns to PASS', async () => {
+    const backing = await mkAccount('VCC', 'BACKING_FLOAT', 'EUR', 2); // ASSET
+    const fee = await mkAccount('VCC', 'FEE_INCOME', 'EUR', 2); // EQUITY
+    // assets = backing 10000.00; NAV = 10000.00 (positive) ⇒ backing/NAV = 100% (a normally-PASSing floor).
+    await recordJournalEntry(db, {
+      description: 'backing vs fee',
+      postings: [
+        { accountId: backing, direction: 'DEBIT', amount: 1_000_000n },
+        { accountId: fee, direction: 'CREDIT', amount: 1_000_000n },
+      ],
+    });
+
+    // Cleared (the default): with configured thresholds the floor PASSes (100% ≥ 60%).
+    const cleared = await buildGroupView(db, { now: NOW, covenantThresholds: THRESHOLDS });
+    expect(cleared.covenants.find((c) => c.key === 'backing-float-floor')!.status).toBe('PASS');
+
+    // Active: the floor is computed against the stress threshold ⇒ a GENUINE BREACH, with the REAL
+    // live ratio preserved as currentBps (not a cosmetic label).
+    const breached = await buildGroupView(db, {
+      now: NOW,
+      covenantThresholds: THRESHOLDS,
+      forceCovenantBreach: true,
+    });
+    const floor = breached.covenants.find((c) => c.key === 'backing-float-floor')!;
+    expect(floor.status).toBe('BREACH');
+    expect(floor.currentBps).toBe(10000); // the real 100% ratio, derived from the ledger
+
+    // Self-contained: a BREACH row is emitted even with NO configured covenant thresholds.
+    const breachedNoThresholds = await buildGroupView(db, { now: NOW, forceCovenantBreach: true });
+    expect(
+      breachedNoThresholds.covenants.find((c) => c.key === 'backing-float-floor')!.status,
+    ).toBe('BREACH');
+    // Without the injection AND without thresholds, the monitor stays empty (unchanged behaviour).
+    expect((await buildGroupView(db, { now: NOW })).covenants).toEqual([]);
+  });
+
+  it('forceCovenantBreach (Story 9.5) reports BREACH even at NAV ≈ 0 (assets = liabilities, the faithful demo) — not NA', async () => {
+    const backing = await mkAccount('VCC', 'BACKING_FLOAT', 'EUR', 2); // ASSET
+    const liab = await mkAccount('VCC', 'NOTE_LIABILITY', 'EUR', 2); // LIABILITY
+    // assets 5000.00 (backing) == liabilities 5000.00 (note) ⇒ NAV = 0 (the seeded faithful demo shape).
+    await recordJournalEntry(db, {
+      description: 'subscribe',
+      postings: [
+        { accountId: backing, direction: 'DEBIT', amount: 500000n },
+        { accountId: liab, direction: 'CREDIT', amount: 500000n },
+      ],
+    });
+
+    // Cleared: a NAV denominator is genuinely NA at NAV = 0 (cannot honestly compute) — the bug the
+    // operator force-breach must overcome.
+    const cleared = await buildGroupView(db, { now: NOW, covenantThresholds: THRESHOLDS });
+    expect(cleared.covenants.find((c) => c.key === 'backing-float-floor')!.status).toBe('NA');
+
+    // Active: the forced row uses the gross footing (assets + liabilities = 1000000 > 0) as denominator,
+    // so it is a GENUINE BREACH (never NA) even though NAV = 0. currentBps = backing/footing = 50%.
+    const breached = await buildGroupView(db, {
+      now: NOW,
+      covenantThresholds: THRESHOLDS,
+      forceCovenantBreach: true,
+    });
+    const floor = breached.covenants.find((c) => c.key === 'backing-float-floor')!;
+    expect(floor.status).toBe('BREACH');
+    expect(floor.currentBps).toBe(5000); // 500000 backing / 1000000 footing = 50%, a real ledger ratio
+
+    // Self-contained at NAV ≈ 0 too: a BREACH row even with NO configured thresholds.
+    const breachedNoThresholds = await buildGroupView(db, { now: NOW, forceCovenantBreach: true });
+    expect(
+      breachedNoThresholds.covenants.find((c) => c.key === 'backing-float-floor')!.status,
+    ).toBe('BREACH');
+
+    // Clearing the override returns to the normal computed status (NA at NAV = 0) — never a stuck flag.
+    const recleared = await buildGroupView(db, { now: NOW, covenantThresholds: THRESHOLDS });
+    expect(recleared.covenants.find((c) => c.key === 'backing-float-floor')!.status).toBe('NA');
+  });
+
   it('aggregates net exposure and the coupled-coin book by market', async () => {
     await createCoupledPair(db, {
       referenceAsset: 'EUR/USD',

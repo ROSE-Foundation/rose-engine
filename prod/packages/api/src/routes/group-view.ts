@@ -20,9 +20,12 @@ export function groupViewRoutes(deps: ApiDeps): FastifyPluginAsyncZod {
         },
       },
       async () => {
+        // The faithful operator covenant-breach injection (Story 9.5, FR-32) is consulted here so the
+        // REAL covenant computation reports a genuine BREACH; inert (false) in paper/read-only.
         const view = await buildGroupView(deps.db, {
           chainSupplies: deps.chainSupplies,
           covenantThresholds: deps.covenantThresholds,
+          forceCovenantBreach: deps.covenantOverride?.get().active ?? false,
         });
         // `GroupView` uses `readonly` arrays; the response shape is structurally identical (a
         // compile-time-only variance) — cast to the inferred wire type. Runtime object is unchanged.
