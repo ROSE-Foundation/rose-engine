@@ -261,6 +261,13 @@ Give Subscribers a per-user **directional** view of their exposure — entry, li
 **Blocking pre-build decision:** counterparty / inventory model (§8 Q8 / §11.4) must be chosen and shown solvency-preserving before the independent-single-side-close story builds; until then the §11.4 solvency guardrail binds. The rest of the epic does not depend on it.
 **Standalone:** Yes — builds on Epics 2 (pair model), 5 (atomic mint/burn + reconcile pattern) and 6 (subscribe/redeem flow + terminal components); introduces **no on-chain change** and delivers the live directional-view value on its own.
 
+### Epic 9: Production-Faithful Demo Mode (mocked externals)
+Make the deployed demo reflect **production behaviour** as closely as possible while staying testnet/paper with **no real capital** — replacing the paper-mode shortcuts (instant auto-confirm, paper-ALLOW authorization, baked-in single identity, fail-closed single-side close) with **mock adapters that honour the real seams**: asynchronous on-chain confirmation (latency, failure, retry, compensation), default-deny authorization fronted by a mocked KYC/AML onboarding (ERC-3643/ONCHAINID-style eligibility), session identity + multi-user, a mocked counterparty/inventory adapter unlocking the §11.4 single-side close, and an operator control panel to drive prod-like events. A distinct `ENGINE_MODE` (`faithful`) wires the mocks behind an honest "real vs mocked" banner.
+**FRs covered:** FR-28, FR-29, FR-30, FR-31, FR-32, FR-33 (PRD §4.9)
+**NFRs (reused):** NFR-4 (fail-closed authorization), NFR-7 (clean interface seams), NFR-8 (substitutable ports), NFR-9 (chain-authoritative commit point)
+**Includes (additional reqs):** a production-faithful composition in `prod/packages/api` (new `ENGINE_MODE=faithful`); mock adapters for async confirmation, default-deny+KYC, session identity, and the §8 Q8 counterparty model; an operator control surface in `prod/packages/web`; honest mode banner + Home overview upkeep; Railway deploy config. **No contract change (no re-audit); no real capital** (the no-accidental-real-money guardrail is unchanged).
+**Standalone:** Yes — additive on top of Epics 4–8; reuses existing substitutable seams (PriceOracle, default-deny Authorization, outbox/saga, ERC-3643). The real board-gated §8 Q8 model and any real-capital path remain deferred.
+
 ---
 
 ## Epic 1: Project Foundation & Double-Entry Ledger Spine
@@ -1041,3 +1048,130 @@ So that the D1-topology close path can never break solvency or force a wrongful 
 **Given** the guardrail is active
 **When** the rest of Epic 8 is exercised
 **Then** the standard whole-package open/close (Story 8.3), pricing, P&L, terminal, and reconciliation all function — confirming the rest of Option C **does not depend** on the deferred §8 Q8 decision
+
+## Epic 9: Production-Faithful Demo Mode (mocked externals)
+
+Make the deployed demo reflect **production behaviour** as closely as possible while staying testnet/paper with **no real capital**. Today's `ENGINE_MODE=paper` takes shortcuts (instant in-process auto-confirm, paper-ALLOW authorization, one baked-in identity, the §11.4 single-side close fail-closed). This epic introduces a distinct **`ENGINE_MODE=faithful`** that wires **mock adapters honouring the real seams** — asynchronous on-chain confirmation, default-deny authorization behind a mocked KYC/AML onboarding, session identity + multi-user, a mocked counterparty/inventory model, and an operator control panel — behind an honest "real vs mocked" banner.
+
+> **Regime & invariants (binding):** PROD regime, TypeScript, `/prod` never imports `/throwaway`. **No contract change (no re-audit). No real capital** — the no-accidental-real-money guardrail (§11.3) is unchanged; `faithful` mode is testnet/paper only. The mocks are **substitutable adapters** behind the existing ports (NFR-8): the `PriceOracle` (Epic 8), the default-deny `postTransfer` Authorization provider (FR-7/8), the outbox/saga commit point (Epic 5). The real board-gated §8 Q8 counterparty model and any real-capital path remain deferred. Source: PRD §4.9 (FR-28–FR-33), Sprint Change Proposal 2026-06-20.
+
+### Story 9.1: Asynchronous on-chain confirmation (mock watcher with latency + failure)
+
+As a build engineer,
+I want a mock confirmation transport that delays the `pending → confirmed` commit point by a realistic, configurable latency and can inject failures,
+So that the demo exercises the REAL outbox/saga commit-point, retry, and compensation — not an instant in-process auto-confirm (FR-28, NFR-9).
+
+**Acceptance Criteria:**
+
+**Given** `ENGINE_MODE=faithful` and a submitted open/close (or subscribe/redeem)
+**When** the mock watcher confirms after a configurable delay
+**Then** the flow stays `pending` until the delayed commit point, then flips to `confirmed` at the on-chain tx commit (no optimistic success) — the same saga path Epic 5 proves, only time-shifted
+**And** the per-flow status reads `pending` during the window and `confirmed` after, observably
+
+**Given** a failure is injected (configurable failure rate or an explicit "fail next" control)
+**When** the mock watcher reports the tx failed
+**Then** the outbox/saga **compensates** (no half-applied state — no orphaned position, no unbalanced ledger), the flow ends `failed`, and the UI shows an explicit, honest error state — never a silent success
+
+**Given** the latency/failure controls
+**When** they are absent or out of range
+**Then** they are **refused fail-closed** (a parked trust input is never silently defaulted, NFR-4) — except the documented `faithful` defaults
+
+### Story 9.2: Default-deny authorization + mocked KYC/AML onboarding
+
+As a compliance-minded operator,
+I want `faithful` mode to use the REAL default-deny `postTransfer` provider fronted by a mocked KYC/AML onboarding that issues ONCHAINID-style eligibility,
+So that capital movement is gated by genuine eligibility (not a paper ALLOW), with onboarding demonstrable end-to-end (FR-29, FR-7, NFR-4).
+
+**Acceptance Criteria:**
+
+**Given** a user who has NOT completed the mocked onboarding
+**When** they attempt to subscribe / open a position
+**Then** the default-deny `postTransfer` chokepoint **refuses** with an explicit, rule-named reason (UX-DR5) — the demo's gate is real eligibility, not an ALLOW stub
+
+**Given** a user who completes the mocked KYC/AML onboarding
+**When** the onboarding issues their eligibility claim
+**Then** the same action is **authorized** and proceeds through the real flow
+
+**Given** an onboarded user whose eligibility is then revoked
+**When** they attempt a gated action
+**Then** they are **re-denied** (revocation is honoured) — proving the gate is live, not one-time
+
+### Story 9.3: Session identity + multi-user
+
+As a Subscriber/operator,
+I want a session/login with a user switcher instead of one baked-in address,
+So that distinct participants act in the demo, each with their own eligibility and positions (FR-30, FR-14).
+
+**Acceptance Criteria:**
+
+**Given** `faithful` mode
+**When** a participant signs in (mock session) and selects an identity
+**Then** the app acts as THAT identity (its EVM address drives positions/eligibility) — replacing the baked-in `VITE_SUBSCRIBER_ADDRESS`; the current identity is always visible
+
+**Given** two distinct signed-in identities
+**When** each lists positions / acts
+**Then** each sees **only their own** positions and eligibility (no leakage), and an operator identity can see the operator surfaces
+
+**Given** no session
+**When** a gated action is attempted
+**Then** it is refused with an explicit "sign in first" state (fail-closed), never acting as a default user
+
+### Story 9.4: Mock counterparty/inventory adapter — independent single-side close (§8 Q8)
+
+As a risk owner / steward,
+I want a **mocked** matched-book/house counterparty adapter satisfying the §11.4 guardrail contract,
+So that the independent single-side close (D1 topology) completes via re-assignment in the demo — while the real board-gated §8 Q8 model stays deferred (FR-31, FR-25 remainder, §11.4).
+
+**Acceptance Criteria:**
+
+**Given** `faithful` mode with the mock counterparty adapter composed, and a position whose opposite leg is held by another user (the D1 topology)
+**When** the holder performs an independent single-side close
+**Then** it **completes** via the mock counterparty (re-assignment / house inventory) — the on-chain package is burned only when both sides are released, and the action is journaled (auditable) — instead of the §11.4 fail-closed refusal
+
+**Given** the mock adapter is clearly labelled as a demo stand-in
+**When** the adapter is absent (e.g. default `paper` mode, or `faithful` without it)
+**Then** the single-side close remains **fail-closed** under the §11.4 guardrail (Story 8.6) — the real model is still board-gated; the mock never leaks into a real-capital path
+
+**Given** a single-side close via the mock
+**When** it settles
+**Then** solvency is preserved — aggregate per-pair/per-side exposure still never exceeds residual backing (the Epic-8.5 reconciliation passes after the re-assignment)
+
+### Story 9.5: Operator control panel for production-like events
+
+As a demo operator,
+I want a control panel to inject production-like events on demand,
+So that prod-state handling (latency, failure, covenant breach, reconciliation divergence) is demonstrable live (FR-32).
+
+**Acceptance Criteria:**
+
+**Given** `faithful` mode and the operator surface
+**When** the operator injects a confirmation **latency** or forces a **failure** on the next flow
+**Then** the demo exhibits the Story-9.1 delayed-commit / compensated-failure behaviour for that flow
+
+**Given** the operator panel
+**When** the operator triggers a **covenant breach** or a deliberate **position↔pair reconciliation divergence**
+**Then** the corresponding surface shows the real BREACH / reported-and-corrected behaviour (reusing the Epic-5/Epic-8.5 reconcile-and-correct path), journaled and surfaced — never a silent change
+
+**Given** a non-`faithful` / read-only deployment
+**When** the operator endpoints are called
+**Then** they return the typed "not available on this deployment" refusal (503), consistent with the existing paper-gated routes
+
+### Story 9.6: Production-faithful composition, honest banner, and deploy
+
+As a build engineer,
+I want `ENGINE_MODE=faithful` to compose the Story 9.1–9.5 mocks behind a clear "real vs mocked" banner, deployed on Railway, with the Home overview kept current,
+So that a visitor sees a coherent near-production demo and always knows what is real vs simulated (FR-33, FR-14).
+
+**Acceptance Criteria:**
+
+**Given** the API boots with `ENGINE_MODE=faithful`
+**When** it composes the services
+**Then** it wires the async-confirmation transport (9.1), default-deny + KYC (9.2), session identity (9.3), the mock counterparty (9.4), and the operator surface (9.5) — and logs an explicit banner naming what is real (ledger, contracts, default-deny gate, reconcile) vs mocked (chain transport latency, KYC issuer, counterparty, price feed)
+
+**Given** the running `faithful` app
+**When** any surface renders
+**Then** an honest, always-visible **mode banner** states "Production-faithful demo — testnet/paper, no real capital; mocked: …" so real vs simulated is never ambiguous (UX-DR4 honesty)
+
+**Given** the three modes (`paper`, `faithful`, and the genuine testnet path)
+**When** `faithful` is exercised
+**Then** the existing `paper` and read-only behaviours are unchanged (additive), the deployed contracts are untouched, no real capital moves, and the Home "what this POC does" overview is updated to describe the faithful mode

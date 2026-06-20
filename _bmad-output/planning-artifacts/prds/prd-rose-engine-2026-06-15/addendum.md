@@ -94,3 +94,14 @@ SPEC.md
 ## I. Parked questions carried from source (do not invent values)
 
 - Coupon of the Rose Note; use-of-proceeds split; conversion-to-participation; backing-float contractual floor. Read from config; absence → explicit refusal.
+
+## J. §4.9 Production-Faithful Demo Mode (Epic 9, FR-28–FR-33) *(sprint change 2026-06-20)*
+
+A **post-P0 fidelity layer** (additive; P0 unchanged): a distinct **`ENGINE_MODE=faithful`** that makes the deployed demo reflect **production behaviour** while staying **testnet/paper with NO real capital** (the §11.3 no-accidental-real-money guardrail is unchanged; deployed contracts untouched, no re-audit). It replaces paper-mode shortcuts with **mock adapters behind the existing substitutable ports** (NFR-8), behind an honest "real vs mocked" banner.
+
+- **FR-28 — Asynchronous on-chain confirmation:** a mock confirmation transport delays the `pending → confirmed` commit point (configurable latency) and can inject failures, exercising the real outbox/saga retry + compensation (Epic 5, NFR-9); no optimistic success; failures end `failed` with no half-applied state.
+- **FR-29 — Default-deny authorization + mocked KYC/AML onboarding:** the real default-deny `postTransfer` provider (FR-7/8) fronted by a mocked onboarding issuing ONCHAINID-style eligibility; un-onboarded ⇒ rule-named refusal (UX-DR5); onboarded ⇒ authorized; revocation re-denies.
+- **FR-30 — Session identity + multi-user:** a mock session/login + user switcher replacing the baked-in `VITE_SUBSCRIBER_ADDRESS`; per-identity positions/eligibility, no leakage; no session ⇒ fail-closed.
+- **FR-31 — Mock counterparty/inventory adapter (§8 Q8):** a mocked matched-book/house adapter satisfying the §11.4 guardrail contract so the independent single-side close completes via re-assignment in the demo; the real model stays board-gated; solvency (per-pair/per-side residual backing, FR-27) preserved; absent adapter ⇒ §11.4 fail-closed (Story 8.6).
+- **FR-32 — Operator control panel:** inject latency/failure, trigger a covenant breach or a position↔pair reconciliation divergence, to demonstrate prod-state handling (reusing Epic-5/8.5 reconcile-and-correct); non-`faithful` ⇒ typed 503.
+- **FR-33 — Faithful composition, honest banner, deploy:** `ENGINE_MODE=faithful` wires FR-28–FR-32 behind an always-visible mode banner (real vs mocked), Railway-deployed; `paper`/read-only unchanged; Home overview kept current.

@@ -115,3 +115,13 @@ development_status:
   8-5-position-pair-reconciliation-per-pair-per-side-residual-backing: done
   8-6-solvency-guardrail-for-independent-single-side-close-gated-on-8-q8: done
   epic-8-retrospective: optional
+
+  # Epic 9: Production-Faithful Demo Mode (mocked externals) — Sprint Change Proposal 2026-06-20
+  epic-9: backlog
+  9-1-async-onchain-confirmation-mock-watcher: backlog
+  9-2-default-deny-authorization-mocked-kyc-onboarding: backlog
+  9-3-session-identity-multi-user: backlog
+  9-4-mock-counterparty-inventory-adapter-single-side-close: backlog
+  9-5-operator-control-panel-prodlike-events: backlog
+  9-6-production-faithful-composition-banner-deploy: backlog
+  epic-9-retrospective: optional
