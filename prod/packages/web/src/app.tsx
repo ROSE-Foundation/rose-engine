@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
 import { IdentitySwitcher } from './components/identity-switcher.js';
+import { ModeBanner } from './components/mode-banner.js';
 import { SignInRequired } from './components/sign-in-required.js';
 import { ThemeProvider } from './components/theme-provider.js';
 import { ThemeToggle } from './components/theme-toggle.js';
@@ -101,6 +102,9 @@ export function Shell(): React.JSX.Element {
 
   return (
     <div className="flex min-h-screen flex-col">
+      {/* The always-visible engine-mode banner (Story 9.6, FR-33) — global across every surface so
+          real vs simulated is never ambiguous (UX-DR4). */}
+      <ModeBanner />
       <header className="flex items-center gap-4 border-b border-border px-6 py-3">
         <button
           type="button"

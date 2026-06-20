@@ -2,12 +2,28 @@
 # Builds the single-service image from the repo Dockerfile (Fastify API serving the @rose/web
 # build on the same origin, behind the shared basic-auth gate). No secret lives in this file:
 # DATABASE_URL, BASIC_AUTH_USER, BASIC_AUTH_PASSWORD are set as Railway service variables, and
-# DATABASE_URL is referenced from the Railway Postgres plugin. ENGINE_MODE=paper is a non-secret
-# default that makes the write flows fully interactive (simulated, no Sepolia).
+# DATABASE_URL is referenced from the Railway Postgres plugin.
+#
+# ENGINE_MODE (a non-secret Railway service variable — NOT baked into the image) selects the demo
+# mode. Supported values:
+#   - paper     — fully-interactive SIMULATED flows that auto-confirm in-process (no Sepolia, no
+#                 secret). The current deployed default.
+#   - faithful  — the production-faithful demo (Epic 9, FR-28–FR-33): the SAME flows over an
+#                 asynchronous on-chain confirmation (configurable latency + injectable failure → real
+#                 saga compensation), a REAL default-deny authorization gate fronted by a mocked
+#                 KYC/AML onboarding, multi-user session identity, a mocked counterparty/inventory
+#                 adapter, and an operator control panel — behind an always-visible "real vs mocked"
+#                 banner. STILL testnet/paper: NO real capital, deployed contracts untouched (no
+#                 re-audit). Enable it by setting ENGINE_MODE=faithful in the Railway service
+#                 variables (no image rebuild, no secret); leaving it unset/`paper` is unchanged.
+#   - (unset / any other value) — read-only (the read surfaces render fully; write flows return a
+#                 typed 503).
+# The running mode + its honest real-vs-mocked summary is reported at GET /mode (behind the gate)
+# and rendered by the web app's always-visible mode banner.
 #
 # No healthcheckPath is set on purpose: the basic-auth gate protects EVERY route (including
-# /health), so an unauthenticated HTTP healthcheck would get 401. Railway's default port-readiness
-# check is used instead.
+# /health and /mode), so an unauthenticated HTTP healthcheck would get 401. Railway's default
+# port-readiness check is used instead.
 
 [build]
 builder = "DOCKERFILE"

@@ -54,14 +54,19 @@ import { makeMockCounterpartyAdapter } from './counterparty-mock.js';
 import type { MockKycRegistry } from './kyc-registry.js';
 
 /**
- * A concise, honest boot banner naming what is real vs mocked for the async-confirmation layer (the
- * always-visible UI banner is Story 9.6). Real: the ledger, the outbox/saga commit point + compensation.
- * Mocked: the chain transport's confirmation latency + injectable failure (testnet/paper, no real capital).
+ * The honest boot banner naming what is real vs mocked across the whole faithful composition (the
+ * always-visible UI banner is Story 9.6, which derives the SAME real/mocked summary from the composed
+ * deps via `deriveEngineMode`). Kept aligned with the FR-33 AC enumeration: REAL — ledger, deployed
+ * contracts, the default-deny authorization gate, the §11.4 solvency guardrail + outbox/saga
+ * compensation, position↔pair reconciliation; MOCKED — the chain transport confirmation latency +
+ * injectable failure, the KYC/AML claim issuer, the counterparty/inventory model, the price feed.
  */
 export const FAITHFUL_MODE_BANNER =
-  'FAITHFUL MODE — production-faithful demo (testnet/paper, NO real capital). REAL: ledger + ' +
-  'outbox/saga commit-point & compensation + §11.4 solvency guardrail. MOCKED: on-chain confirmation ' +
-  'latency + injectable failure + counterparty/inventory (house) single-side-close re-assignment.';
+  'FAITHFUL MODE — production-faithful demo (testnet/paper, NO real capital; deployed contracts ' +
+  'untouched). REAL: double-entry ledger + outbox/saga commit-point & compensation + the default-deny ' +
+  'authorization gate + §11.4 solvency guardrail + position↔pair reconciliation. MOCKED: on-chain ' +
+  'confirmation latency + injectable failure + KYC/AML claim issuer + counterparty/inventory (house) ' +
+  'single-side-close re-assignment + reference-asset price feed.';
 
 /**
  * Builds the faithful subscribe/redeem/strategy write services. Mirrors `makePaperModeServices` but

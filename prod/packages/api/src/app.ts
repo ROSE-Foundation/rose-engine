@@ -29,6 +29,7 @@ import { coupledPairRoutes } from './routes/coupled-pairs.js';
 import { faithfulOnboardingRoutes } from './routes/faithful-onboarding.js';
 import { groupViewRoutes } from './routes/group-view.js';
 import { healthRoutes } from './routes/health.js';
+import { modeRoutes } from './routes/mode.js';
 import { openApiRoutes } from './routes/openapi.js';
 import { operatorRoutes } from './routes/operator.js';
 import { positionRoutes } from './routes/positions.js';
@@ -256,6 +257,7 @@ export async function buildApp(deps: ApiDeps, ext?: BuildAppExtensions): Promise
 
   // Routes — base READ-ONLY surface + system endpoints.
   await app.register(healthRoutes);
+  await app.register(modeRoutes(deps));
   await app.register(openApiRoutes);
   await app.register(groupViewRoutes(deps));
   await app.register(coupledPairRoutes(deps));

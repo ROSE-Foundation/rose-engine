@@ -9,7 +9,7 @@ import { ThemeProvider } from './components/theme-provider.js';
 import type { ApiClient } from './lib/api-client.js';
 import { ApiClientProvider } from './lib/queries.js';
 import { DEMO_IDENTITIES, SessionProvider, type Identity } from './lib/session.js';
-import { okPosition, positionsResponse, tradingGroupView } from './test/fixtures.js';
+import { engineMode, okPosition, positionsResponse, tradingGroupView } from './test/fixtures.js';
 
 const ALICE = DEMO_IDENTITIES[0]!;
 const BOB = DEMO_IDENTITIES[1]!;
@@ -34,6 +34,7 @@ function renderShell(client: Partial<ApiClient>, initialIdentity?: Identity | nu
 function tradingClient(): { client: Partial<ApiClient>; owners: string[] } {
   const owners: string[] = [];
   const client: Partial<ApiClient> = {
+    getEngineMode: () => Promise.resolve(engineMode()),
     getGroupView: () => Promise.resolve(tradingGroupView()),
     getPositions: (owner: string) => {
       owners.push(owner);

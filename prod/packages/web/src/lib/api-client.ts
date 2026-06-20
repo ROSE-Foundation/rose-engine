@@ -2,6 +2,7 @@ import type {
   ClosePositionRequest,
   ClosePositionView,
   CoupledPairResponse,
+  EngineModeInfo,
   FaithfulConfirmationSettingsUpdate,
   FaithfulConfirmationSettingsView,
   GroupViewResponse,
@@ -42,6 +43,11 @@ export class ApiClientError extends Error {
  * the Subscriber WRITES + status reads (Story 6.6 — subscribe/redeem via Review→Confirm + pending).
  */
 export interface ApiClient {
+  /**
+   * Report the running engine mode + an honest real-vs-mocked summary (Story 9.6, FR-33). Always
+   * available (never 503-gated) — read by the always-visible global mode banner.
+   */
+  getEngineMode(): Promise<EngineModeInfo>;
   getGroupView(): Promise<GroupViewResponse>;
   getCoupledPair(id: string): Promise<CoupledPairResponse>;
   getRoseNote(id: string): Promise<RoseNoteResponse>;
@@ -179,6 +185,7 @@ export function createApiClient({
   const enc = encodeURIComponent;
 
   return {
+    getEngineMode: () => get<EngineModeInfo>('/mode'),
     getGroupView: () => get<GroupViewResponse>('/group-view'),
     getCoupledPair: (id: string) => get<CoupledPairResponse>(`/coupled-pairs/${enc(id)}`),
     getRoseNote: (id: string) => get<RoseNoteResponse>(`/rose-notes/${enc(id)}`),

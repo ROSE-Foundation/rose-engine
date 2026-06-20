@@ -3,6 +3,7 @@
 // browser bundle). Nested shapes are reached by indexed access so nothing is redefined here.
 import type {
   CoupledPairResponse,
+  EngineModeInfo,
   FaithfulConfirmationSettingsUpdate,
   FaithfulConfirmationSettingsView,
   GroupViewResponse,
@@ -22,6 +23,7 @@ import type {
 
 export type {
   CoupledPairResponse,
+  EngineModeInfo,
   FaithfulConfirmationSettingsUpdate,
   FaithfulConfirmationSettingsView,
   GroupViewResponse,
@@ -38,6 +40,9 @@ export type {
   SubscribeRequest,
   SubscriptionResponse,
 };
+
+/** The running engine mode (paper | faithful | read-only). */
+export type EngineMode = EngineModeInfo['engineMode'];
 
 /** A per-user position with its live mark (the Exchange-terminal row source, Story 8.4). */
 export type Position = PositionResponse;

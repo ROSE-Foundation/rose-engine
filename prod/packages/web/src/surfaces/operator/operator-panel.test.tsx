@@ -17,6 +17,7 @@ import { DEMO_IDENTITIES, SessionProvider, type Identity } from '../../lib/sessi
 import {
   confirmationSettings,
   confirmationSettingsRangeError,
+  engineMode,
   operatorConfirmationUnavailableError,
   operatorCovenantUnavailableError,
   operatorInjectionState,
@@ -170,6 +171,7 @@ describe('OperatorPanel — operator-role gating in the Shell (Story 9.3)', () =
 
   function shellClient(): Partial<ApiClient> {
     return {
+      getEngineMode: () => Promise.resolve(engineMode()),
       getGroupView: () => Promise.resolve(tradingGroupView()),
       getPositions: () => Promise.resolve(positionsResponse([okPosition()])),
       getOnboardingState: (address: string) =>

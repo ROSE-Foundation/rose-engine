@@ -745,6 +745,30 @@ export type GroupViewResponse = z.infer<typeof GroupViewSchema>;
 /** Liveness response. */
 export const HealthSchema = z.object({ status: z.literal('ok') });
 
+// ─── Engine mode (Story 9.6, FR-33) ───────────────────────────────────────────────────────────────
+// The honest real-vs-mocked summary the `GET /mode` route returns and the always-visible web banner
+// reads. Driven from the actual composition (`deriveEngineMode`) so it can never drift from what the
+// running server really wired. No money crosses here.
+
+/** The running engine mode: a fully-interactive simulated `paper`, the production-faithful `faithful`, or `read-only`. */
+export const EngineModeSchema = z
+  .enum(['paper', 'faithful', 'read-only'])
+  .describe('The running engine mode (paper | faithful | read-only).');
+
+/** The engine-mode report: the mode + an honest list of what is REAL vs what is MOCKED (UX-DR4). */
+export const EngineModeInfoSchema = z
+  .object({
+    engineMode: EngineModeSchema,
+    real: z.array(z.string()).describe('What is genuinely real (not mocked) in this mode.'),
+    mocked: z
+      .array(z.string())
+      .describe('What is mocked/simulated in this mode (NO real capital).'),
+  })
+  .describe('The running engine mode + an honest real-vs-mocked summary (FR-33).');
+
+/** The inferred wire type of the engine-mode report (the web banner's response type). */
+export type EngineModeInfo = z.infer<typeof EngineModeInfoSchema>;
+
 // ─── Structured error ───────────────────────────────────────────────────────────────────────────
 
 /**

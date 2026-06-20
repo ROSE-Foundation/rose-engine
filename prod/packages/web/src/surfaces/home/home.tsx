@@ -79,12 +79,15 @@ const FOOTER_LINES = [
  * block in the same change so the first page never drifts from what the app actually demonstrates.
  */
 const DEMO_OVERVIEW = {
-  badge: 'Paper mode · simulated in-process · no testnet, no real funds, no secrets',
+  badge: 'Paper or production-faithful mode · no real capital · contracts untouched',
   lead:
     'ROSE Engine is an interactive proof-of-concept for a cash-backed coupled-coin system and its ' +
-    'off-chain secondary-trading position layer. Everything here runs in paper mode — every subscribe, ' +
-    'redeem, open, close and reset is simulated in-process — so the full mechanism can be exercised ' +
-    'safely, end to end, without a testnet or real money.',
+    'off-chain secondary-trading position layer. It runs in one of two simulated modes — paper (every ' +
+    'subscribe, redeem, open, close and reset auto-confirms in-process) or production-faithful (the ' +
+    'same flows over an asynchronous on-chain confirmation, a real default-deny authorization gate, ' +
+    'and a mocked counterparty) — so the full mechanism can be exercised safely, end to end, without a ' +
+    'testnet or real money. The always-visible banner at the top states exactly what is real vs ' +
+    'mocked in the running mode; no real capital ever moves and the deployed contracts are untouched.',
   capabilities: [
     {
       label: 'The coupled-coin instrument',
@@ -126,6 +129,18 @@ const DEMO_OVERVIEW = {
       text:
         'The Treasury Dashboard monitors covenants and consolidated NAV; the Coupled Coins ' +
         'walkthrough animates issuance, mark-to-market and the collateral invariant end to end.',
+    },
+    {
+      label: 'Production-faithful mode',
+      text:
+        'In ENGINE_MODE=faithful the same flows run closer to production: the on-chain confirmation ' +
+        'is asynchronous (a configurable latency that can be made to fail → real saga compensation, ' +
+        'no half-applied state), capital movement is gated by a REAL default-deny authorization fronted ' +
+        'by a mocked KYC/AML onboarding, each participant signs in to their own multi-user session, a ' +
+        'mocked counterparty unlocks the independent single-side close via house re-assignment, and an ' +
+        'operator panel injects production-like events (latency/failure, covenant breach, reconcile ' +
+        'divergence). What is real (ledger, contracts, default-deny gate, reconciliation) vs mocked ' +
+        '(confirmation latency, KYC issuer, counterparty, price feed) is stated honestly in the banner.',
     },
     {
       label: 'Delta Engine (research)',

@@ -11,6 +11,7 @@ import type {
   ClosePositionRequest,
   ClosePositionView,
   CoupledPairResponse,
+  EngineModeInfo,
   FaithfulConfirmationSettingsUpdate,
   FaithfulConfirmationSettingsView,
   GroupViewResponse,
@@ -44,6 +45,22 @@ function useApiClient(): ApiClient {
 
 /** The short live-data refresh window (drives the `LiveIndicator` freshness). */
 export const REFRESH_WINDOW_MS = 5000;
+
+/**
+ * The running engine mode + honest real-vs-mocked summary (Story 9.6, FR-33) read by the always-visible
+ * global mode banner. The mode is fixed for the lifetime of a deployment, so this never polls
+ * (`staleTime: Infinity`) and does NOT retry — an unreachable endpoint degrades the banner gracefully to
+ * a safe honest fallback rather than blocking on retries.
+ */
+export function useEngineMode(): UseQueryResult<EngineModeInfo, Error> {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['engine-mode'],
+    queryFn: () => client.getEngineMode(),
+    staleTime: Infinity,
+    retry: false,
+  });
+}
 
 /** Live consolidated group view (FR-9). Polls within the refresh window. */
 export function useGroupView(): UseQueryResult<GroupViewResponse, Error> {

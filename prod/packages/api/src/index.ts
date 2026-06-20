@@ -76,6 +76,12 @@ export {
   OnboardingStateSchema,
 } from './schemas.js';
 
+// Engine-mode reporting (Story 9.6, FR-33): the honest real-vs-mocked report driver + its wire schema
+// and type (so the web mode banner binds to the SAME single-source contract type via a fully-erased
+// `import type`). `GET /mode` returns `deriveEngineMode(deps)`, derived from the actual composition.
+export { deriveEngineMode } from './engine-mode.js';
+export { EngineModeSchema, EngineModeInfoSchema, type EngineModeInfo } from './schemas.js';
+
 // Operator control panel (Story 9.5, FR-32): the faithful-mode covenant-breach + reconcile-divergence
 // injection stores + the operator wire schemas/types (so the web operator surface binds to the SAME
 // single-source contract types via a fully-erased `import type`).

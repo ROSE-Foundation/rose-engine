@@ -5,6 +5,7 @@ import { ApiClientError } from '../lib/api-client.js';
 import type {
   ClosePositionView,
   CoupledPairResponse,
+  EngineModeInfo,
   FaithfulConfirmationSettingsView,
   FlowPosition,
   GroupViewEntity,
@@ -616,6 +617,28 @@ export function reconciliationReport(): PositionReconciliationReport {
     anyMismatch: false,
     anyCorrected: false,
     corrections: 0,
+  };
+}
+
+// ─── Engine mode (Story 9.6, FR-33) — the global mode banner report ──────────────────────────────
+
+/** The `GET /mode` engine-mode report (faithful by default; override the mode + arrays as needed). */
+export function engineMode(overrides: Partial<EngineModeInfo> = {}): EngineModeInfo {
+  return {
+    engineMode: 'faithful',
+    real: [
+      'Double-entry ledger + per-(asset, scale) balance invariant',
+      'Default-deny authorization gate (the real postTransfer chokepoint)',
+      'Position ↔ pair reconciliation (residual-backing solvency)',
+      'Deployed coupled-pair contracts (unchanged — no re-audit)',
+    ],
+    mocked: [
+      'On-chain confirmation latency + injectable failure (async transport)',
+      'KYC/AML claim issuer (mock ONCHAINID onboarding)',
+      'Counterparty / inventory model (house re-assignment on single-side close)',
+      'Reference-asset price feed (deterministic replay oracle)',
+    ],
+    ...overrides,
   };
 }
 
