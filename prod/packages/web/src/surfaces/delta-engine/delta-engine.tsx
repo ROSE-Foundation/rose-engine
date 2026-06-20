@@ -21,10 +21,12 @@ export function DeltaEngineSurface(): React.JSX.Element {
         </span>
       </div>
       <p className="max-w-3xl text-sm text-muted-foreground">
-        Closed agent-based market simulation — two populations of long/short agents whose trades
-        fire on accumulated carry pressure, cleared each tick by a Dutch auction into an endogenous
-        price. Internal market only; disjoint from ROSE P0. Embedded read-only visualisation of a
-        sample run.
+        A contrarian, multi-scale directional-change (intrinsic-time) trading model from
+        Glattfelder/Houweling/Olsen (2025) — one agent per δ threshold decomposes the price into
+        directional-change events, fits support/resistance lines, and fades breakouts; the net
+        exposure oscillates between +u and −u and is decoupled from PnL (no take-profit /
+        stop-loss). A volatility-feedback loop temporarily silences agents whose activity falls out
+        of sync. Disjoint from ROSE P0. Embedded read-only visualisation of a sample run.
       </p>
       <iframe
         title="Delta Engine PoC visualisation"

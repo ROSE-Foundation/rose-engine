@@ -127,6 +127,15 @@ const DEMO_OVERVIEW = {
         'The Treasury Dashboard monitors covenants and consolidated NAV; the Coupled Coins ' +
         'walkthrough animates issuance, mark-to-market and the collateral invariant end to end.',
     },
+    {
+      label: 'Delta Engine (research)',
+      text:
+        'A throwaway research tab implementing the Glattfelder/Houweling/Olsen (2025) paradigm: a ' +
+        'contrarian, multi-scale directional-change (intrinsic-time) trading model. One agent per δ ' +
+        'threshold fits support/resistance to overshoot events and fades breakouts, a volatility ' +
+        'scaling law silences out-of-sync agents, and the net exposure oscillates between +u and −u, ' +
+        'decoupled from PnL (no take-profit / stop-loss). Disjoint from the ROSE P0 mechanism.',
+    },
   ],
 } as const;
 

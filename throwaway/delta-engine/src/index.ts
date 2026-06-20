@@ -8,3 +8,6 @@ export * from './auction.js';
 export * from './simulation.js';
 export * from './outputs.js';
 export * from './viz.js';
+export * from './delta-engine.js';
+export * from './delta-viz.js';
+export * from './sample-series.js';
