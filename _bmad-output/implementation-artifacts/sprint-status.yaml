@@ -1,5 +1,5 @@
 # generated: 2026-06-15
-# last_updated: 2026-06-19
+# last_updated: 2026-06-20
 # project: rose-engine
 # project_key: NOKEY
 # tracking_system: file-system
@@ -35,7 +35,7 @@
 # - Dev moves story to 'review', then runs code-review (fresh context, different LLM recommended)
 
 generated: 2026-06-15
-last_updated: 2026-06-19
+last_updated: 2026-06-20
 project: rose-engine
 # Epic 8 cycle started 2026-06-19 (autonomous story-after-story, fresh sub-agent per story)
 project_key: NOKEY
@@ -117,8 +117,8 @@ development_status:
   epic-8-retrospective: optional
 
   # Epic 9: Production-Faithful Demo Mode (mocked externals) — Sprint Change Proposal 2026-06-20
-  epic-9: backlog
-  9-1-async-onchain-confirmation-mock-watcher: backlog
+  epic-9: in-progress
+  9-1-async-onchain-confirmation-mock-watcher: done
   9-2-default-deny-authorization-mocked-kyc-onboarding: backlog
   9-3-session-identity-multi-user: backlog
   9-4-mock-counterparty-inventory-adapter-single-side-close: backlog

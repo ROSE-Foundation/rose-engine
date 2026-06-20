@@ -18,6 +18,12 @@
 // enabled implicitly, and its on-chain effects are SIMULATED, not real (logged at boot). Without it the
 // write routes return the existing typed 503 (refuse-if-absent); the real on-chain write path needs
 // out-of-band Sepolia secrets and stays deferred. The READ surfaces always render fully.
+//
+// `ENGINE_MODE=faithful` (Story 9.1, FR-28) composes the SAME inner write services over an ASYNC
+// confirmation transport: the commit point fires after a configurable realistic LATENCY (not instantly)
+// and can be made to FAIL, driving the REAL Epic-5 outbox/saga compensation (no half-applied state) —
+// the production-faithful counterpart to paper's instant auto-confirm. `paper` is unchanged; the two
+// modes are mutually exclusive.
 import { createHash, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import fastifyBasicAuth from '@fastify/basic-auth';
@@ -31,6 +37,13 @@ import { createDb, createPool, migrateUp, type RoseDb } from '@rose/ledger';
 import { makePaperModeServices, PAPER_MODE_BANNER } from '@rose/rose-note';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildApp, type ApiDeps, type MarkTrustInputs } from './app.js';
+import { makeFaithfulConfirmationSettingsStore } from './faithful/confirmation-settings.js';
+import { FaithfulConfirmationTransport, realScheduler } from './faithful/confirmation-transport.js';
+import {
+  FAITHFUL_MODE_BANNER,
+  makeFaithfulModeServices,
+  makeFaithfulPositionService,
+} from './faithful/faithful-mode.js';
 import { makePaperPositionService } from './paper-position-service.js';
 import { makePaperReplayOracle } from './paper-replay-oracle.js';
 import { seedPaperDemo } from './seed-demo.js';
@@ -101,6 +114,20 @@ export function isPaperModeRequested(
   env: Record<string, string | undefined> = process.env,
 ): boolean {
   return (env.ENGINE_MODE ?? '').trim().toLowerCase() === 'paper';
+}
+
+/**
+ * Whether FAITHFUL MODE is EXPLICITLY requested via `ENGINE_MODE=faithful` (Story 9.1, FR-28). Faithful
+ * mode composes the SAME inner write services as paper but over the ASYNC confirmation transport (a
+ * configurable-latency, failure-injectable commit point driving the real Epic-5 saga compensation),
+ * rather than the instant in-process auto-confirm. Like paper it is NEVER enabled implicitly — its
+ * on-chain effects are SIMULATED, not real. Any other value (incl. unset) leaves the write services
+ * uncomposed (the typed 503). `paper` and `faithful` are mutually exclusive (paper is checked first).
+ */
+export function isFaithfulModeRequested(
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  return (env.ENGINE_MODE ?? '').trim().toLowerCase() === 'faithful';
 }
 
 /**
@@ -272,6 +299,44 @@ async function main(): Promise<void> {
     console.log(
       '[serve] paper mode ACTIVE — subscribe/redeem/strategy + position open/close are fully ' +
         'interactive; on-chain effects are SIMULATED in-process (no Sepolia, no secret).',
+    );
+  } else if (isFaithfulModeRequested()) {
+    console.warn(`[serve] ${FAITHFUL_MODE_BANNER}`);
+    console.log(
+      '[serve] faithful mode: seeding demo data + composing ASYNC-confirmation write services…',
+    );
+    const paperConfig = await seedPaperDemo(db);
+    // ONE faithful-confirmation settings store (latency + failure injection) + ONE transport, shared by
+    // every faithful write service so the operator control (Story 9.5) tunes a single source of truth.
+    // The transport drives the commit point after a realistic delay (real setTimeout scheduler) and can
+    // inject a failure that compensates the existing Epic-5 saga (FR-28, NFR-9).
+    const confirmationSettings = makeFaithfulConfirmationSettingsStore();
+    const transport = new FaithfulConfirmationTransport({
+      db,
+      scheduler: realScheduler,
+      settings: confirmationSettings,
+    });
+    const faithful = makeFaithfulModeServices({ db, ...paperConfig }, transport);
+    const positionService = makeFaithfulPositionService({ db, paperConfig, transport });
+    // The price oracle (Lever 1 replay) + simulation settings + read surfaces stay EXACTLY as in paper —
+    // faithful only time-shifts the confirmation commit point and can inject failures.
+    const simulationSettings = makeSimulationSettingsStore();
+    deps = {
+      db,
+      logger: true,
+      covenantThresholds,
+      subscriptions: faithful.subscriptions,
+      redemptions: faithful.redemptions,
+      strategy: faithful.strategy,
+      positionService,
+      simulationSettings,
+      priceOracle: makePaperReplayOracle(db, { settings: () => simulationSettings.get() }),
+      markTrust: PAPER_MARK_TRUST,
+    };
+    console.log(
+      '[serve] faithful mode ACTIVE — subscribe/redeem/strategy + position open/close are fully ' +
+        'interactive; the on-chain confirmation is ASYNC (configurable latency) and can be made to ' +
+        'FAIL → saga compensation (no half-applied state). All SIMULATED in-process (no Sepolia, no secret).',
     );
   } else {
     console.log(
