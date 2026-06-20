@@ -70,6 +70,44 @@ describe('SimulationSurface — read + tune the paper replay-feed parameters', (
     expect(screen.getByRole('button', { name: /apply/i })).toBeEnabled();
   });
 
+  it('renders the mode selector; δ control is hidden in sine mode and revealed in DC mode', async () => {
+    const getSimulationSettings = vi.fn(() => Promise.resolve(simulationSettings()));
+    render(wrap({ getSimulationSettings }, <SimulationSurface />));
+
+    // Both feed modes are offered; the default is sine, so the δ control is not shown.
+    await screen.findByLabelText('Sine (clock-based)');
+    expect(screen.getByLabelText('Directional change (intrinsic time)')).toBeInTheDocument();
+    expect(screen.queryByLabelText('DC threshold value')).not.toBeInTheDocument();
+
+    // Switching to directional-change reveals the δ control.
+    await userEvent.click(screen.getByLabelText('Directional change (intrinsic time)'));
+    expect(screen.getByLabelText<HTMLInputElement>('DC threshold value').value).toBe('0.01');
+  });
+
+  it('switching to DC + editing δ + Apply PUTs mode and dcThreshold', async () => {
+    const getSimulationSettings = vi.fn(() => Promise.resolve(simulationSettings()));
+    const updateSimulationSettings = vi.fn<
+      (patch: SimulationSettingsUpdate) => Promise<ReturnType<typeof simulationSettings>>
+    >(() =>
+      Promise.resolve(
+        simulationSettings({ mode: 'directional-change', dcThreshold: 0.03, version: 2 }),
+      ),
+    );
+    render(wrap({ getSimulationSettings, updateSimulationSettings }, <SimulationSurface />));
+
+    await userEvent.click(await screen.findByLabelText('Directional change (intrinsic time)'));
+    const dc = screen.getByLabelText<HTMLInputElement>('DC threshold value');
+    await userEvent.clear(dc);
+    await userEvent.type(dc, '0.03');
+    await userEvent.click(screen.getByRole('button', { name: /apply/i }));
+
+    expect(updateSimulationSettings).toHaveBeenCalledTimes(1);
+    const body = updateSimulationSettings.mock.calls[0]![0];
+    expect(body.mode).toBe('directional-change');
+    expect(body.dcThreshold).toBe(0.03);
+    expect(await screen.findByText(/applied — version 2/i)).toBeInTheDocument();
+  });
+
   it('renders the clean "not available" state when the GET returns 503 (non-paper)', async () => {
     const getSimulationSettings = vi.fn(() => Promise.reject(simulationSettingsUnavailableError()));
     render(wrap({ getSimulationSettings }, <SimulationSurface />));

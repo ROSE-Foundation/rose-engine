@@ -550,12 +550,16 @@ export function simulationSettings(
   return {
     amplitude: 0.07,
     periodSeconds: 120,
+    mode: 'sine',
+    dcThreshold: 0.01,
     version: 1,
     bounds: {
       amplitudeMin: 0,
       amplitudeMax: 1,
       periodSecondsMin: 5,
       periodSecondsMax: 3600,
+      dcThresholdMin: 0.001,
+      dcThresholdMax: 0.2,
     },
     ...overrides,
   };

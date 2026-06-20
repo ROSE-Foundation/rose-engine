@@ -9,4 +9,5 @@ export const PRICE_ORACLE_PACKAGE_NAME = '@rose/price-oracle' as const;
 
 export * from './price-oracle.js';
 export * from './adapters/csv-replay-adapter.js';
+export * from './directional-change.js';
 export * from './mark-to-market.js';

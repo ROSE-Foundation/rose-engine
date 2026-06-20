@@ -3,7 +3,7 @@ import { Button } from '../../components/ui/button.js';
 import { Skeleton } from '../../components/ui/skeleton.js';
 import { ApiClientError } from '../../lib/api-client.js';
 import { cn } from '../../lib/cn.js';
-import type { SimulationSettingsView } from '../../lib/contract-types.js';
+import type { SimulationFeedMode, SimulationSettingsView } from '../../lib/contract-types.js';
 import { useSimulationSettings, useUpdateSimulationSettings } from '../../lib/queries.js';
 
 const PANEL = 'rounded-lg border border-border bg-card';
@@ -30,8 +30,11 @@ function SimulationSettingsForm({ view }: { view: SimulationSettingsView }): Rea
   const { bounds } = view;
   const [amplitude, setAmplitude] = useState(view.amplitude);
   const [periodSeconds, setPeriodSeconds] = useState(view.periodSeconds);
+  const [mode, setMode] = useState<SimulationFeedMode>(view.mode);
+  const [dcThreshold, setDcThreshold] = useState(view.dcThreshold);
   const update = useUpdateSimulationSettings();
 
+  const isDc = mode === 'directional-change';
   const divergent = amplitude * DEMO_LEVERAGE >= 1;
   const err = update.error;
   const unavailable = err instanceof ApiClientError && err.status === 503;
@@ -41,7 +44,7 @@ function SimulationSettingsForm({ view }: { view: SimulationSettingsView }): Rea
   const appliedVersion = update.data?.version;
 
   function onApply(): void {
-    update.mutate({ amplitude, periodSeconds });
+    update.mutate({ amplitude, periodSeconds, mode, dcThreshold });
   }
 
   return (
@@ -55,6 +58,85 @@ function SimulationSettingsForm({ view }: { view: SimulationSettingsView }): Rea
       </div>
 
       <div className="mt-4 flex flex-col gap-5">
+        {/* Feed mode — clock-based sine (baseline) vs intrinsic-time directional-change (δ-threshold). */}
+        <div className="flex flex-col gap-2">
+          <span className="text-sm font-medium">Feed mode</span>
+          <div className="flex flex-wrap gap-2">
+            {(
+              [
+                ['sine', 'Sine (clock-based)'],
+                ['directional-change', 'Directional change (intrinsic time)'],
+              ] as const
+            ).map(([value, label]) => (
+              <label
+                key={value}
+                className={cn(
+                  'flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm',
+                  mode === value
+                    ? 'border-primary bg-primary/10 text-foreground'
+                    : 'border-border text-dim',
+                )}
+              >
+                <input
+                  type="radio"
+                  name="sim-mode"
+                  value={value}
+                  checked={mode === value}
+                  aria-label={label}
+                  onChange={() => setMode(value)}
+                />
+                {label}
+              </label>
+            ))}
+          </div>
+          <p className="text-[11px] text-dim">
+            {isDc
+              ? 'Directional change: an intrinsic-time δ-threshold random walk with overshoots — the path reverses on a price move, not on the clock (PRD §4.7).'
+              : 'Sine: a pure clock-based oscillation around each anchor (the baseline feed).'}
+          </p>
+        </div>
+
+        {/* δ / DC threshold — shown only in directional-change mode (the reversal size that flips a run). */}
+        {isDc && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <label htmlFor="sim-dc-threshold" className="text-sm font-medium">
+                δ (DC threshold)
+              </label>
+              <span className="font-numeric text-sm tabular-nums text-dim">
+                {dcThreshold} <span className="text-[11px]">({asPercent(dcThreshold)})</span>
+              </span>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                id="sim-dc-threshold"
+                type="range"
+                className="min-w-0 flex-1"
+                min={bounds.dcThresholdMin}
+                max={bounds.dcThresholdMax}
+                step={0.001}
+                value={dcThreshold}
+                aria-label="DC threshold"
+                onChange={(e) => setDcThreshold(Number(e.target.value))}
+              />
+              <input
+                type="number"
+                className="w-24 rounded-md border border-border bg-background px-2 py-1 text-right font-numeric tabular-nums"
+                min={bounds.dcThresholdMin}
+                max={bounds.dcThresholdMax}
+                step={0.001}
+                value={dcThreshold}
+                aria-label="DC threshold value"
+                onChange={(e) => setDcThreshold(Number(e.target.value))}
+              />
+            </div>
+            <p className="text-[11px] text-dim">
+              The reversal size (δ) that registers a directional change and flips the run (range{' '}
+              {bounds.dcThresholdMin}–{bounds.dcThresholdMax}).
+            </p>
+          </div>
+        )}
+
         {/* Amplitude — a fractional price swing around each pair's anchor (0 = flat feed). */}
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-between gap-3">

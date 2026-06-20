@@ -186,18 +186,25 @@ export interface OverExposedSide {
 // be kept in sync with those schemas (the single source of truth). amplitude/periodSeconds are plain
 // NUMBERS (simulation parameters, NOT money — no smallest-units string rule).
 
+/** The selectable replay-feed shape: a clock-based sine, or an intrinsic-time directional-change walk. */
+export type SimulationFeedMode = 'sine' | 'directional-change';
+
 /** The inclusive validation bounds for the simulation settings (so the UI can build its controls). */
 export interface SimulationSettingsBounds {
   amplitudeMin: number;
   amplitudeMax: number;
   periodSecondsMin: number;
   periodSecondsMax: number;
+  dcThresholdMin: number;
+  dcThresholdMax: number;
 }
 
-/** The core tunable replay-feed parameters: fractional price-swing amplitude + full cycle period. */
+/** The core tunable replay-feed parameters: amplitude + cycle period + feed mode + δ DC threshold. */
 export interface SimulationSettings {
   amplitude: number;
   periodSeconds: number;
+  mode: SimulationFeedMode;
+  dcThreshold: number;
 }
 
 /** `GET /simulation/settings` + the body of `PUT /simulation/settings` — settings + version + bounds. */
@@ -210,6 +217,8 @@ export interface SimulationSettingsView extends SimulationSettings {
 export interface SimulationSettingsUpdate {
   amplitude?: number;
   periodSeconds?: number;
+  mode?: SimulationFeedMode;
+  dcThreshold?: number;
 }
 
 /** A position↔pair mismatch and its correction outcome (surfaced — never silent). */

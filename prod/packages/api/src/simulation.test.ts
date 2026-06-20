@@ -72,6 +72,45 @@ describe('PUT /simulation/settings', () => {
     await app.close();
   });
 
+  it('round-trips a directional-change mode + δ patch', async () => {
+    const app = await appWithStore();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/simulation/settings',
+      payload: { mode: 'directional-change', dcThreshold: 0.02 },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      mode: 'directional-change',
+      dcThreshold: 0.02,
+      version: 1,
+    });
+    await app.close();
+  });
+
+  it('rejects an invalid mode enum with a 400', async () => {
+    const app = await appWithStore();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/simulation/settings',
+      payload: { mode: 'random-walk' },
+    });
+    expect(res.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it('rejects an out-of-range δ with a typed 400 (fail-closed)', async () => {
+    const app = await appWithStore();
+    const res = await app.inject({
+      method: 'PUT',
+      url: '/simulation/settings',
+      payload: { dcThreshold: 0.5 },
+    });
+    expect(res.statusCode).toBe(400);
+    expect(res.json().error.code).toBe('SimulationSettingsError');
+    await app.close();
+  });
+
   it('is a typed 503 when the store is not composed', async () => {
     const app = await buildApp({ db });
     const res = await app.inject({

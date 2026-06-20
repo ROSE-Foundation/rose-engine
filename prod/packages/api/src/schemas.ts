@@ -772,6 +772,11 @@ export const IdParamSchema = z.object({ id: z.string().uuid() });
 // ─── Simulation settings (paper-mode replay feed parameters) ───────────────────────────────────────
 // amplitude/periodSeconds are simulation parameters, NOT money — they cross as plain numbers.
 
+/** The selectable replay-feed shape: a clock-based sine, or an intrinsic-time directional-change walk. */
+export const SimulationFeedModeSchema = z
+  .enum(['sine', 'directional-change'])
+  .describe('Replay-feed shape: clock-based sine, or intrinsic-time directional-change.');
+
 /** The inclusive validation bounds for the simulation settings (surfaced so the UI can build controls). */
 export const SimulationSettingsBoundsSchema = z
   .object({
@@ -779,6 +784,8 @@ export const SimulationSettingsBoundsSchema = z
     amplitudeMax: z.number(),
     periodSecondsMin: z.number(),
     periodSecondsMax: z.number(),
+    dcThresholdMin: z.number(),
+    dcThresholdMax: z.number(),
   })
   .describe('Inclusive bounds the simulation settings are validated against.');
 
@@ -787,15 +794,21 @@ export const SimulationSettingsViewSchema = z
   .object({
     amplitude: z.number(),
     periodSeconds: z.number(),
+    mode: SimulationFeedModeSchema,
+    dcThreshold: z.number(),
     version: z.number().int(),
     bounds: SimulationSettingsBoundsSchema,
   })
-  .describe('Paper-mode replay-feed parameters (price oscillation amplitude + cycle period).');
+  .describe(
+    'Paper-mode replay-feed parameters (oscillation amplitude + cycle period + feed mode + δ DC threshold).',
+  );
 
 /** A partial update to the simulation settings — any provided field is validated against the bounds. */
 export const SimulationSettingsUpdateSchema = z
   .object({
     amplitude: z.number().optional(),
     periodSeconds: z.number().optional(),
+    mode: SimulationFeedModeSchema.optional(),
+    dcThreshold: z.number().optional(),
   })
   .describe('Patch the paper replay-feed parameters (any subset).');

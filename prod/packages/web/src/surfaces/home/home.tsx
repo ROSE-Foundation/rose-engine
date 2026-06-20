@@ -116,8 +116,9 @@ const DEMO_OVERVIEW = {
     {
       label: 'Live price simulation',
       text:
-        'The Simulation tab tunes the replay price feed (oscillation amplitude + cycle period). Push ' +
-        'the amplitude past the trust band to see a mark flagged DIVERGENT — marks are never ' +
+        'The Simulation tab tunes the replay price feed and selects its mode — a clock-based sine, or a ' +
+        'directional-change (intrinsic-time) δ-threshold walk that reverses on price moves, not the clock. ' +
+        'Push the amplitude past the trust band to see a mark flagged DIVERGENT — marks are never ' +
         'fabricated; an absent or stale feed shows an explicit state, not a number.',
     },
     {

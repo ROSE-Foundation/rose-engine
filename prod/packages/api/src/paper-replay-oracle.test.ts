@@ -14,6 +14,7 @@ import {
 import { markToMarket, type MarkablePair } from '@rose/price-oracle';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { makePaperReplayOracle, PAPER_LIVE_REPLAY_SOURCE } from './paper-replay-oracle.js';
+import { DEFAULT_SIMULATION_SETTINGS, type SimulationFeedMode } from './simulation-settings.js';
 
 let pool: ReturnType<typeof createPool>;
 let db: RoseDb;
@@ -55,6 +56,28 @@ function at(ms: number): () => Date {
 }
 
 const POSITIVE_8DP = /^\d+\.\d{8}$/;
+
+/** Feed params for a given mode (version 1 so the oracle builds a fresh series). */
+function feed(mode: SimulationFeedMode): () => {
+  amplitude: number;
+  periodSeconds: number;
+  mode: SimulationFeedMode;
+  dcThreshold: number;
+  version: number;
+} {
+  return () => ({ ...DEFAULT_SIMULATION_SETTINGS, mode, version: 1 });
+}
+
+/** Sample the feed across one full cycle at fixed instants (deterministic replay positions). */
+async function sampleCycle(mode: SimulationFeedMode, stepMs = 10_000): Promise<string[]> {
+  const out: string[] = [];
+  for (let ms = 0; ms < 120_000; ms += stepMs) {
+    const oracle = makePaperReplayOracle(db, { now: at(ms), settings: feed(mode) });
+    const q = await oracle.getPrice(ASSET);
+    out.push(q!.price);
+  }
+  return out;
+}
 
 describe('paper live replay oracle', () => {
   it('returns null for an asset with no issued pair (honest no-feed, never fabricated)', async () => {
@@ -109,5 +132,55 @@ describe('paper live replay oracle', () => {
       });
       expect(mark.status).toBe('OK');
     }
+  });
+
+  describe('directional-change feed mode', () => {
+    it('MOVES across the cycle and is NOT the pure sine path (intrinsic-time, not clock-based)', async () => {
+      await seedPair();
+      const dc = await sampleCycle('directional-change');
+      const sine = await sampleCycle('sine');
+      // It moves (more than one distinct value)…
+      expect(new Set(dc).size).toBeGreaterThan(1);
+      // …and the DC path differs from the sine path for the same amplitude/period (a different shape).
+      expect(dc).not.toEqual(sine);
+    });
+
+    it('every DC-mode quote is a strictly-positive 8-dp string stamped fresh, unknown ⇒ null', async () => {
+      await seedPair();
+      const oracle = makePaperReplayOracle(db, {
+        now: at(42_000),
+        settings: feed('directional-change'),
+      });
+      const q = await oracle.getPrice(ASSET);
+      expect(q!.price).toMatch(POSITIVE_8DP);
+      expect(Number(q!.price)).toBeGreaterThan(0);
+      expect(q!.asOf.getTime()).toBe(42_000);
+      // Unknown asset is still an honest no-feed in DC mode.
+      expect(await oracle.getPrice('NOSUCH/ASSET')).toBeNull();
+    });
+
+    it('stays inside the §15 trust band — every DC-mode mark is a valid OK state', async () => {
+      await seedPair();
+      const markable: MarkablePair = {
+        referenceAsset: ASSET,
+        anchorPrice: ANCHOR,
+        leverage: '3',
+        collateralPool: 1_000_000_000n,
+        floor: '0.50',
+      };
+      for (let ms = 0; ms < 120_000; ms += 10_000) {
+        const oracle = makePaperReplayOracle(db, {
+          now: at(ms),
+          settings: feed('directional-change'),
+        });
+        const q = await oracle.getPrice(ASSET);
+        const mark = markToMarket(markable, q, {
+          freshnessBoundMs: 24 * 60 * 60 * 1000,
+          maxRelativeDivergence: '0.5',
+          now: new Date(ms),
+        });
+        expect(mark.status).toBe('OK');
+      }
+    });
   });
 });

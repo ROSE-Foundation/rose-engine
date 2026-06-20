@@ -59,4 +59,43 @@ describe('simulation-settings store', () => {
     expect(r.periodSeconds).toBe(DEFAULT_SIMULATION_SETTINGS.periodSeconds);
     expect(r.version).toBe(2);
   });
+
+  it('defaults to the sine mode with the parked δ, and the bounds carry the δ range', () => {
+    const v = makeSimulationSettingsStore().get();
+    expect(v.mode).toBe('sine');
+    expect(v.dcThreshold).toBe(DEFAULT_SIMULATION_SETTINGS.dcThreshold);
+    expect(v.bounds.dcThresholdMin).toBe(SIMULATION_SETTINGS_BOUNDS.dcThresholdMin);
+    expect(v.bounds.dcThresholdMax).toBe(SIMULATION_SETTINGS_BOUNDS.dcThresholdMax);
+  });
+
+  it('accepts a valid mode + δ patch and bumps the version', () => {
+    const store = makeSimulationSettingsStore();
+    const next = store.set({ mode: 'directional-change', dcThreshold: 0.02 });
+    expect(next.mode).toBe('directional-change');
+    expect(next.dcThreshold).toBe(0.02);
+    expect(next.version).toBe(1);
+    // A partial patch leaves mode untouched.
+    const after = store.set({ dcThreshold: 0.05 });
+    expect(after.mode).toBe('directional-change');
+    expect(after.dcThreshold).toBe(0.05);
+  });
+
+  it('rejects an invalid mode enum (fail-closed) and does not bump the version', () => {
+    const store = makeSimulationSettingsStore();
+    expect(() =>
+      // @ts-expect-error — exercising the runtime enum guard with an invalid value
+      store.set({ mode: 'random-walk' }),
+    ).toThrow(SimulationSettingsError);
+    expect(store.get().mode).toBe('sine');
+    expect(store.get().version).toBe(0);
+  });
+
+  it('rejects an out-of-range or non-finite δ (fail-closed) and does not bump the version', () => {
+    const store = makeSimulationSettingsStore();
+    expect(() => store.set({ dcThreshold: 0 })).toThrow(SimulationSettingsError); // below min
+    expect(() => store.set({ dcThreshold: 0.5 })).toThrow(SimulationSettingsError); // above max
+    expect(() => store.set({ dcThreshold: Number.NaN })).toThrow(SimulationSettingsError);
+    expect(store.get().dcThreshold).toBe(DEFAULT_SIMULATION_SETTINGS.dcThreshold);
+    expect(store.get().version).toBe(0);
+  });
 });
