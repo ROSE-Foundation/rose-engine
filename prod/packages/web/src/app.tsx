@@ -1,11 +1,14 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useState } from 'react';
+import { IdentitySwitcher } from './components/identity-switcher.js';
+import { SignInRequired } from './components/sign-in-required.js';
 import { ThemeProvider } from './components/theme-provider.js';
 import { ThemeToggle } from './components/theme-toggle.js';
 import { Button } from './components/ui/button.js';
 import { LogoMark } from './components/ui/logo-mark.js';
 import { createApiClient, resolveApiBaseUrl } from './lib/api-client.js';
 import { ApiClientProvider, useGroupView } from './lib/queries.js';
+import { SessionProvider, useSession } from './lib/session.js';
 import { DeltaEngineSurface } from './surfaces/delta-engine/delta-engine.js';
 import { CoupledPairSurface } from './surfaces/coupled-pair/coupled-pair.js';
 import { CovenantConsole } from './surfaces/covenant-console/covenant-console.js';
@@ -48,13 +51,6 @@ const SURFACE_LABELS: Record<Surface, string> = {
 const queryClient = new QueryClient();
 const apiClient = createApiClient({ baseUrl: resolveApiBaseUrl() });
 
-// The Subscriber identity (paper/local): an env-driven address with an empty default — NO secret,
-// NO baked-in placeholder. The deployed source is the session's allowlisted ONCHAINID claim
-// (ops-deferred, see deferred-work.md story-6.6).
-function resolveSubscriberAddress(): string {
-  return import.meta.env.VITE_SUBSCRIBER_ADDRESS ?? '';
-}
-
 /** Resolves the first live pair from the group view so the Coupled-Pair surface has a target. */
 function CoupledPairPanel(): React.JSX.Element {
   const query = useGroupView();
@@ -63,8 +59,8 @@ function CoupledPairPanel(): React.JSX.Element {
   return <CoupledPairSurface pairId={pairId} />;
 }
 
-/** Resolves the Subscriber's held note ids from the live group view (paper/local composition). */
-function SubscriberPanel(): React.JSX.Element {
+/** Resolves the Subscriber's held note ids from the live group view; acts as the session identity. */
+function SubscriberPanel({ subscriberAddress }: { subscriberAddress: string }): React.JSX.Element {
   const query = useGroupView();
   const noteIds = (query.data?.coupledPairs ?? [])
     .map((p) => p.noteId)
@@ -72,14 +68,26 @@ function SubscriberPanel(): React.JSX.Element {
   return (
     <SubscriberSurface
       eligibility={{ eligible: true }}
-      subscriberAddress={resolveSubscriberAddress()}
+      subscriberAddress={subscriberAddress}
       noteIds={noteIds}
     />
   );
 }
 
-function Shell(): React.JSX.Element {
+/**
+ * The nav surfaces a given identity may see (Story 9.3 role gate): an operator sees everything; a
+ * subscriber (or a signed-out visitor) does NOT see the operator-only Simulation tab. Exchange +
+ * Subscriber stay in the nav for the signed-out visitor but fail closed to a "sign in first" state.
+ */
+function navSurfacesFor(isOperator: boolean): readonly Surface[] {
+  return isOperator ? NAV_SURFACES : NAV_SURFACES.filter((s) => s !== 'simulation');
+}
+
+export function Shell(): React.JSX.Element {
   const [surface, setSurface] = useState<Surface>('home');
+  const { identity, isOperator } = useSession();
+  const ownerAddress = identity?.address ?? '';
+  const navSurfaces = navSurfacesFor(isOperator);
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -94,7 +102,7 @@ function Shell(): React.JSX.Element {
           <span className="font-display text-base font-semibold">ROSE Engine</span>
         </button>
         <nav className="flex items-center gap-1">
-          {NAV_SURFACES.map((s) => (
+          {navSurfaces.map((s) => (
             <Button
               key={s}
               size="sm"
@@ -105,7 +113,8 @@ function Shell(): React.JSX.Element {
             </Button>
           ))}
         </nav>
-        <div className="ml-auto">
+        <div className="ml-auto flex items-center gap-2">
+          <IdentitySwitcher />
           <ThemeToggle />
         </div>
       </header>
@@ -113,11 +122,32 @@ function Shell(): React.JSX.Element {
         {surface === 'home' && <Home onSelect={setSurface} />}
         {surface === 'covenant-console' && <CovenantConsole />}
         {surface === 'coupled-pair' && <CoupledPairPanel />}
-        {surface === 'exchange-trading' && (
-          <ExchangeTrading onNavigate={setSurface} owner={resolveSubscriberAddress()} />
-        )}
-        {surface === 'subscriber' && <SubscriberPanel />}
-        {surface === 'simulation' && <SimulationSurface />}
+        {/* Exchange open/close is a gated write surface — fail closed to "sign in first" with no
+            default address, never acting as a baked-in identity (FR-30, AC3). */}
+        {surface === 'exchange-trading' &&
+          (identity ? (
+            <ExchangeTrading
+              onNavigate={setSurface}
+              owner={ownerAddress}
+              showOperatorTools={isOperator}
+            />
+          ) : (
+            <SignInRequired surface="the Exchange terminal" />
+          ))}
+        {surface === 'subscriber' &&
+          (identity ? (
+            <SubscriberPanel subscriberAddress={ownerAddress} />
+          ) : (
+            <SignInRequired surface="the Subscriber surface" />
+          ))}
+        {/* The Simulation tab is an operator surface — gated even if the surface state lingers after a
+            switch to a non-operator identity. */}
+        {surface === 'simulation' &&
+          (isOperator ? (
+            <SimulationSurface />
+          ) : (
+            <SignInRequired surface="Simulation" operatorOnly />
+          ))}
         {surface === 'delta-engine' && <DeltaEngineSurface />}
       </main>
     </div>
@@ -133,7 +163,9 @@ export function App(): React.JSX.Element {
     <ThemeProvider>
       <QueryClientProvider client={queryClient}>
         <ApiClientProvider value={apiClient}>
-          <Shell />
+          <SessionProvider>
+            <Shell />
+          </SessionProvider>
         </ApiClientProvider>
       </QueryClientProvider>
     </ThemeProvider>

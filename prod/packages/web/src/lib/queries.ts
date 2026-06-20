@@ -258,7 +258,7 @@ export function useUpdateSimulationSettings(): UseMutationResult<
 /**
  * Live KYC/AML onboarding state for an address (faithful mode). A non-faithful deployment surfaces a
  * typed 503 `FAITHFUL_ONBOARDING_UNAVAILABLE` the control NAMES (shows a "faithful-mode only" note).
- * Disabled when no address is wired (e.g. an empty `VITE_SUBSCRIBER_ADDRESS`).
+ * Disabled when no address is wired (e.g. no signed-in session identity — Story 9.3).
  */
 export function useOnboardingState(address: string): UseQueryResult<OnboardingState, Error> {
   const client = useApiClient();

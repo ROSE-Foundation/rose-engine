@@ -120,7 +120,7 @@ development_status:
   epic-9: in-progress
   9-1-async-onchain-confirmation-mock-watcher: done
   9-2-default-deny-authorization-mocked-kyc-onboarding: done
-  9-3-session-identity-multi-user: backlog
+  9-3-session-identity-multi-user: done
   9-4-mock-counterparty-inventory-adapter-single-side-close: backlog
   9-5-operator-control-panel-prodlike-events: backlog
   9-6-production-faithful-composition-banner-deploy: backlog

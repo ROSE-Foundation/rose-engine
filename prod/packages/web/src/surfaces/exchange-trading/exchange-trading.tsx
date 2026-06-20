@@ -312,6 +312,7 @@ export function ExchangeTradingView({
   owner,
   now,
   onNavigate,
+  showOperatorTools = true,
 }: {
   view: GroupViewResponse;
   /** The viewer's live per-user positions + marks (Story 8.4). Empty ⇒ no oracle/owner wired. */
@@ -320,6 +321,9 @@ export function ExchangeTradingView({
   owner?: string;
   now?: number;
   onNavigate?: (surface: 'subscriber') => void;
+  /** Role gate (Story 9.3): the operator-only tools (reconciliation panel + KYC control) render only
+   * for an operator identity. Defaults to `true` (backward-compatible with the pre-session callers). */
+  showOperatorTools?: boolean;
 }): React.JSX.Element {
   const execution = deriveExecution(view);
   const markets = view.coupledCoinBook;
@@ -385,7 +389,7 @@ export function ExchangeTradingView({
           </div>
 
           <div className="flex min-w-0 flex-col gap-4">
-            <KycOnboardingControl address={owner ?? ''} />
+            {showOperatorTools && <KycOnboardingControl address={owner ?? ''} />}
             <div className={cn(PANEL, 'min-w-0')}>
               <OrderTicket pair={marketPair} owner={owner} onNavigate={onNavigate} />
             </div>
@@ -407,7 +411,7 @@ export function ExchangeTradingView({
         )}
       </section>
 
-      <ReconciliationPanel />
+      {showOperatorTools && <ReconciliationPanel />}
 
       {execution.length > 0 && (
         <>
@@ -470,9 +474,11 @@ export function ExchangeTradingView({
 export function ExchangeTrading({
   owner = '',
   onNavigate,
+  showOperatorTools = true,
 }: {
   owner?: string;
   onNavigate?: (surface: 'subscriber') => void;
+  showOperatorTools?: boolean;
 } = {}): React.JSX.Element {
   const query = useGroupView();
   const positionsQuery = usePositions(owner);
@@ -506,6 +512,7 @@ export function ExchangeTrading({
       owner={owner}
       now={query.dataUpdatedAt}
       onNavigate={onNavigate}
+      showOperatorTools={showOperatorTools}
     />
   );
 }

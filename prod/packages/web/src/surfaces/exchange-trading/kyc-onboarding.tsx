@@ -2,9 +2,10 @@
 // Exchange terminal that makes the default-deny + KYC gate DEMONSTRABLE: it shows the current address's
 // onboarding/eligibility state and lets the operator Onboard / Revoke it, so a revoked address is then
 // refused (and an onboarded one authorized) on subscribe / position-open. It operates on the app's
-// current `VITE_SUBSCRIBER_ADDRESS` (a clean per-user session is Story 9.3). On a non-faithful
-// deployment the endpoint returns a typed 503 and the control degrades to an honest "faithful-mode only"
-// note — no new design system, no fabricated state.
+// current SESSION identity address (Story 9.3 — replacing the baked-in `VITE_SUBSCRIBER_ADDRESS`) and is
+// shown only for an operator identity (the operator-tools role gate). On a non-faithful deployment the
+// endpoint returns a typed 503 and the control degrades to an honest "faithful-mode only" note — no new
+// design system, no fabricated state.
 import { ApiClientError } from '../../lib/api-client.js';
 import { cn } from '../../lib/cn.js';
 import { useOnboardingState, useSetOnboarding } from '../../lib/queries.js';
@@ -18,8 +19,8 @@ function isUnavailable(error: unknown): boolean {
 }
 
 /**
- * The onboarding control. `address` is the current demo identity (`VITE_SUBSCRIBER_ADDRESS`); an empty
- * address renders nothing (no identity to gate). Reads live onboarding state and exposes Onboard/Revoke.
+ * The onboarding control. `address` is the current session identity (Story 9.3); an empty address
+ * renders nothing (no identity to gate). Reads live onboarding state and exposes Onboard/Revoke.
  */
 export function KycOnboardingControl({ address }: { address: string }): React.JSX.Element | null {
   const state = useOnboardingState(address);
