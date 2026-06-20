@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf), §18 "Required Outputs".
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf), §18 "Required Outputs".
 //
 // Serialises the recorded per-tick series to CSV and JSON. The five §18 series (p_int, queue_depth,
 // alive_count, total_capital, matched_volume) live across the SeriesRow columns, with long/short

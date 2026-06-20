@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf), Part V §10–12 clearing.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf), Part V §10–12 clearing.
 //
 // Rolling-window order queue + per-tick Dutch auction that produces the endogenous price p_int.
 //

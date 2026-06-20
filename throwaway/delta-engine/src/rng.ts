@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf). Seedable PRNG + Pareto sampler.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf). Seedable PRNG + Pareto sampler.
 //
 // Determinism is a Boundary constraint: a seeded PRNG makes runs and tests reproduce exactly.
 // mulberry32 is a tiny, well-distributed 32-bit generator — adequate for an R&D market sim.

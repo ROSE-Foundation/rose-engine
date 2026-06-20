@@ -1,4 +1,8 @@
-# @throwaway/alpha-engine (Alpha Engine PoC)
+# @throwaway/delta-engine (Delta Engine PoC)
+
+> **Note** — Renamed from `@throwaway/alpha-engine` on 2026-06-20. The original PoC spec and
+> reviews are kept under their historical name in `_bmad-output/implementation-artifacts/`
+> (`spec-alpha-engine-poc.md`, `gap-analysis-alpha-engine-poc-2026-06-18.md`, `review-alpha-*`).
 
 **THROWAWAY / R&D** — a closed agent-based market simulation. Deletable with **no** impact on
 `/prod`; `/prod` must **never** import this. Not a pnpm-workspace member and not part of the
@@ -28,12 +32,12 @@ meaningful events, not the wall clock*:
 
 - `@throwaway/simulator` (**micro / instrument**): a coupled pair resets only on a **floor-breach
   price event**, never on a clock.
-- `@throwaway/alpha-engine` (**macro / market**): each agent's **carry-pressure** clock fires by
+- `@throwaway/delta-engine` (**macro / market**): each agent's **carry-pressure** clock fires by
   threshold; the whole market's price is event-paced and endogenous, with no wall clock anywhere.
 
 These two models are **disjoint** — this PoC shares nothing with the P0 coupled-coin model
 (ledger, ERC-3643, compliance, coupled pair, floor-breach reset) and does **not** advance P0. See
-`_bmad-output/implementation-artifacts/gap-analysis-alpha-engine-poc-2026-06-18.md`.
+`_bmad-output/implementation-artifacts/gap-analysis-delta-engine-poc-2026-06-18.md`.
 
 ## Frozen design decisions
 
@@ -59,17 +63,17 @@ The spec is loose on order **denomination**; the implemented (frozen) reading:
 
 ```sh
 # Simulate with the Part VIII defaults and write CSV + JSON + a self-contained HTML
-# visualisation under throwaway/alpha-engine/out/
-pnpm exec tsx throwaway/alpha-engine/src/run.ts
+# visualisation under throwaway/delta-engine/out/
+pnpm exec tsx throwaway/delta-engine/src/run.ts
 
 # Then open the visualisation in a browser (no server needed — data is inlined):
-open throwaway/alpha-engine/out/index.html   # macOS
+open throwaway/delta-engine/out/index.html   # macOS
 
 # Tests
-pnpm exec vitest run throwaway/alpha-engine
+pnpm exec vitest run throwaway/delta-engine
 
 # Typecheck
-pnpm exec tsc -p throwaway/alpha-engine/tsconfig.json --noEmit
+pnpm exec tsc -p throwaway/delta-engine/tsconfig.json --noEmit
 ```
 
 Outputs (`out/series.csv`, `out/series.json`) carry the five §18 series per tick: `p_int`,

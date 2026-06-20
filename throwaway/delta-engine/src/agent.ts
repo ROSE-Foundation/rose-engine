@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf), Part II §3 "Agent Structure".
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf), Part II §3 "Agent Structure".
 //
 // One agent = a simple float record. `side` is fixed for life (the §5 Lane model — a long never
 // flips to short). All money/price values are plain JS `number` (floats permitted here; NFR-2

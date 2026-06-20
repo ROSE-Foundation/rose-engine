@@ -6,7 +6,7 @@ import { Button } from './components/ui/button.js';
 import { LogoMark } from './components/ui/logo-mark.js';
 import { createApiClient, resolveApiBaseUrl } from './lib/api-client.js';
 import { ApiClientProvider, useGroupView } from './lib/queries.js';
-import { AlphaEngineSurface } from './surfaces/alpha-engine/alpha-engine.js';
+import { DeltaEngineSurface } from './surfaces/delta-engine/delta-engine.js';
 import { CoupledPairSurface } from './surfaces/coupled-pair/coupled-pair.js';
 import { CovenantConsole } from './surfaces/covenant-console/covenant-console.js';
 import { ExchangeTrading } from './surfaces/exchange-trading/exchange-trading.js';
@@ -21,10 +21,10 @@ type Surface =
   | 'exchange-trading'
   | 'subscriber'
   | 'simulation'
-  | 'alpha-engine';
+  | 'delta-engine';
 
 // Topnav surfaces (Home is reached via the logo mark, per the mocks). Labels follow index.html.
-// `alpha-engine` is a THROWAWAY R&D PoC embedded as a static asset (see AlphaEngineSurface) — it
+// `delta-engine` is a THROWAWAY R&D PoC embedded as a static asset (see DeltaEngineSurface) — it
 // adds no /prod→/throwaway code dependency.
 const NAV_SURFACES: readonly Surface[] = [
   'exchange-trading',
@@ -32,7 +32,7 @@ const NAV_SURFACES: readonly Surface[] = [
   'coupled-pair',
   'subscriber',
   'simulation',
-  'alpha-engine',
+  'delta-engine',
 ];
 
 const SURFACE_LABELS: Record<Surface, string> = {
@@ -42,7 +42,7 @@ const SURFACE_LABELS: Record<Surface, string> = {
   'exchange-trading': 'Exchange',
   subscriber: 'Subscriber',
   simulation: 'Simulation',
-  'alpha-engine': 'Alpha Engine',
+  'delta-engine': 'Delta Engine',
 };
 
 const queryClient = new QueryClient();
@@ -118,7 +118,7 @@ function Shell(): React.JSX.Element {
         )}
         {surface === 'subscriber' && <SubscriberPanel />}
         {surface === 'simulation' && <SimulationSurface />}
-        {surface === 'alpha-engine' && <AlphaEngineSurface />}
+        {surface === 'delta-engine' && <DeltaEngineSurface />}
       </main>
     </div>
   );

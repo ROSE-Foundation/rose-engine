@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf) — initialisation tests.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf) — initialisation tests.
 // Covers §4 (per-side rescale to K/2, balance init) and §7 (d_i ∝ K0_i, the firing-frequency law).
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_PARAMS } from './params.js';

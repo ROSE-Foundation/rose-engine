@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf) — Dutch-auction tests.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf) — Dutch-auction tests.
 // Covers the I/O matrix's "crossing found" / "no crossing holds price" rows, the two-sided
 // crossing price (free to rise AND fall — no ratchet floor), per-trade zero-sum conservation, and
 // the remaining-inventory cap across ≥2 same-side orders.

@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC — tests for the self-contained HTML visualisation generator.
+// THROWAWAY — Delta Engine PoC — tests for the self-contained HTML visualisation generator.
 import { describe, it, expect } from 'vitest';
 import { DEFAULT_PARAMS } from './params.js';
 import { mulberry32 } from './rng.js';

@@ -1,8 +1,8 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf) — runnable entrypoint.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf) — runnable entrypoint.
 //
 // Runs the simulation with DEFAULT_PARAMS (Part VIII) under a fixed seed and writes the five §18
-// series to CSV + JSON under throwaway/alpha-engine/out/. Run from the repo root:
-//   pnpm exec tsx throwaway/alpha-engine/src/run.ts
+// series to CSV + JSON under throwaway/delta-engine/out/. Run from the repo root:
+//   pnpm exec tsx throwaway/delta-engine/src/run.ts
 //
 // REGIME: lives under /throwaway, Node stdlib only.
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -33,17 +33,17 @@ function main(): void {
 
   const last = result.series.at(-1);
   console.log(
-    `[alpha-engine] seed=${DEFAULT_SEED} ticks=${result.finalTick} reason=${result.reason}`,
+    `[delta-engine] seed=${DEFAULT_SEED} ticks=${result.finalTick} reason=${result.reason}`,
   );
   if (last !== undefined) {
     console.log(
-      `[alpha-engine] final: p_int=${last.pInt.toFixed(6)} ` +
+      `[delta-engine] final: p_int=${last.pInt.toFixed(6)} ` +
         `alive=${last.aliveLong}L/${last.aliveShort}S total_capital=${last.totalCapital.toFixed(2)}`,
     );
   }
-  console.log(`[alpha-engine] wrote ${csvPath}`);
-  console.log(`[alpha-engine] wrote ${jsonPath}`);
-  console.log(`[alpha-engine] wrote ${htmlPath}  (open in a browser)`);
+  console.log(`[delta-engine] wrote ${csvPath}`);
+  console.log(`[delta-engine] wrote ${jsonPath}`);
+  console.log(`[delta-engine] wrote ${htmlPath}  (open in a browser)`);
 }
 
 main();

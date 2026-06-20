@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf) — main-loop tests.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf) — main-loop tests.
 // Covers the p_int(0) row, two-sided price movement (rises AND falls — no ratchet), the no-trade
 // carry-drain invariant, bankruptcy removal + queued-order purge, param validation, and determinism.
 import { describe, it, expect } from 'vitest';

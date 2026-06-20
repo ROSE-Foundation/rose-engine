@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf), §4 init + §7 threshold scaling.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf), §4 init + §7 threshold scaling.
 //
 // Draws Pareto capital per side, rescales each side to sum K/2, sets opening balances from the
 // home fraction f and starting price x0, and assigns the carry-pressure firing threshold

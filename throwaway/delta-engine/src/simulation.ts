@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf), Part VII §16 main loop.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf), Part VII §16 main loop.
 //
 // Wires §6 (carry pressure), §8–9 (firing + two-regime order size), §10 (window expiry),
 // §11–13 (Dutch auction + zero-sum capital update), §14 (carry drain), §15 (bankruptcy) and the

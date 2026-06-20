@@ -1,4 +1,4 @@
-// THROWAWAY — Alpha Engine PoC (docs/alpha_engine_poc_v1.pdf), Part VIII §17 parameter table.
+// THROWAWAY — Delta Engine PoC (docs/alpha_engine_poc_v1.pdf), Part VIII §17 parameter table.
 //
 // Encodes the simulation's global parameters. Binary floats are intentional and permitted here
 // (NFR-2 binds /prod only — this package is disposable R&D, never imported by /prod).
