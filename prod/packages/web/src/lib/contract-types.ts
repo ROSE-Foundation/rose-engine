@@ -77,3 +77,129 @@ export type NetExposure = GroupViewResponse['netExposure'];
 
 /** One market row of the coupled-coin book (coupled pairs aggregated by reference asset). */
 export type CoupledCoinMarket = GroupViewResponse['coupledCoinBook'][number];
+
+/** The fixed directional side of a position (LONG | SHORT) — reused from the position wire type. */
+export type PositionSide = PositionResponse['side'];
+
+/** A position's lifecycle state (OPEN | CLOSED) — reused from the position wire type. */
+export type PositionLifecycle = PositionResponse['lifecycle'];
+
+// ─── Position open/close + reconcile wire types (Stories 8.3/8.5/8.6, FR-25/FR-27) ──────────────
+//
+// These MIRROR the `@rose/api` Zod schemas (`OpenPositionRequestSchema`, `ClosePositionRequestSchema`,
+// `OpenPositionViewSchema`, `ClosePositionViewSchema`, `PositionReconciliationReportSchema`) field for
+// field. They are declared here rather than re-exported because the package root (`@rose/api`) does
+// not re-export them; they MUST be kept in sync with those schemas (the single source of truth). Every
+// money field is a string (NFR-2): decimal strings for genuinely-decimal values, raw smallest-unit
+// integer strings for magnitudes, signed integer strings where a value may be negative.
+
+/** A position open/close flow's lifecycle status — `pending` until the on-chain commit point. */
+export type PositionFlowStatus = 'pending' | 'confirmed' | 'failed';
+
+/** The body of `POST /positions/open` — `amount` is a smallest-units integer string (NFR-2). */
+export interface OpenPositionRequest {
+  coupledPairId: string;
+  owner: string;
+  side: PositionSide;
+  amount: string;
+  paymentAsset: string;
+  idempotencyKey: string;
+}
+
+/** The body of `POST /positions/close` (whole-package / same-owner close over the burn path). */
+export interface ClosePositionRequest {
+  positionId: string;
+  paymentAsset: string;
+  idempotencyKey: string;
+}
+
+/** The persisted position embedded in a flow view once confirmed (no live `mark`; null while pending). */
+export interface FlowPosition {
+  id: string;
+  coupledPairId: string;
+  owner: string;
+  referenceAsset: string;
+  side: PositionSide;
+  sizeUnits: string;
+  entryPrice: string;
+  collateral: string;
+  leverage: string;
+  realizedPnl: string;
+  lifecycle: PositionLifecycle;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** `POST /positions/open` + `GET /positions/open/:id` — pending until the commit point, then confirmed. */
+export interface OpenPositionView {
+  id: string;
+  coupledPairId: string;
+  owner: string;
+  side: PositionSide;
+  amount: string;
+  paymentAsset: string;
+  status: PositionFlowStatus;
+  txHash: string | null;
+  journalEntryId: string | null;
+  position: FlowPosition | null;
+}
+
+/** `POST /positions/close` + `GET /positions/close/:id` — pending until the commit point, then confirmed. */
+export interface ClosePositionView {
+  id: string;
+  positionId: string;
+  coupledPairId: string;
+  owner: string;
+  amount: string;
+  paymentAsset: string;
+  status: PositionFlowStatus;
+  txHash: string | null;
+  journalEntryId: string | null;
+  position: FlowPosition | null;
+}
+
+/** A per-(pair, side) residual-backing solvency row (report-only); amounts are integer strings. */
+export interface PositionSideBacking {
+  coupledPairId: string;
+  referenceAsset: string;
+  side: PositionSide;
+  backing: string;
+  exposure: string;
+  headroom: string;
+  overExposed: boolean;
+  overExposedBy: string;
+  openPositionCount: number;
+}
+
+/** An over-exposed (pair, side), surfaced so cross-pair/cross-side headroom can never mask it. */
+export interface OverExposedSide {
+  coupledPairId: string;
+  side: PositionSide;
+  overExposedBy: string;
+}
+
+/** A position↔pair mismatch and its correction outcome (surfaced — never silent). */
+export interface PositionMismatch {
+  positionId: string;
+  coupledPairId: string;
+  owner: string;
+  side: PositionSide;
+  voidedCollateral: string;
+  corrected: boolean;
+  correctable: boolean;
+  journalEntryId: string | null;
+  reason: string | null;
+}
+
+/** The full `POST /positions/reconcile` report (FR-27): residual-backing solvency + mismatches. */
+export interface PositionReconciliationReport {
+  reconciledAt: string;
+  source: 'positions+pairs+chain';
+  sideBacking: PositionSideBacking[];
+  overExposedSides: OverExposedSide[];
+  anyOverExposure: boolean;
+  mismatches: PositionMismatch[];
+  anyMismatch: boolean;
+  anyCorrected: boolean;
+  corrections: number;
+}

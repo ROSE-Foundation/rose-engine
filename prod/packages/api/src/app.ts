@@ -8,6 +8,7 @@
 import fastifySwagger from '@fastify/swagger';
 import type { RoseDb } from '@rose/ledger';
 import type { PriceOracle } from '@rose/price-oracle';
+import type { PositionService } from '@rose/positions';
 import type { ChainSupplySnapshot, CovenantThresholds } from '@rose/reconcile';
 import type { RedemptionService, StrategyExecutor, SubscriptionService } from '@rose/rose-note';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
@@ -89,6 +90,15 @@ export interface ApiDeps {
    * returns a typed 503 — never silently default a trust bound). Ignored when no oracle is composed.
    */
   readonly markTrust?: MarkTrustInputs;
+  /**
+   * Optional Epic-8 position service (the paper composition layer over `@rose/positions`
+   * `makePositionService`, Stories 8.3/8.6). Injected port — the API gains its `@rose/chain` edge only
+   * through this paper composition (`paper-position-service.ts`). Drives `POST /positions/open|close`
+   * and the per-flow status reads. When absent (read-only / non-paper deployment), those write paths
+   * are a typed 503 (refuse-if-absent); the `GET /positions` P&L read is unaffected. Also gates the
+   * operator `POST /positions/reconcile` route (paper-only).
+   */
+  readonly positionService?: PositionService;
   /** Optional OpenAPI metadata override. */
   readonly openApiInfo?: OpenApiInfo;
   /** Optional Fastify logger toggle (defaults off — tests stay quiet). */

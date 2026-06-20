@@ -5,12 +5,21 @@
 // consolidated group view is already a plain no-`bigint`/no-float object from `@rose/reconcile`, so
 // it needs no re-serialization here.
 import type { CoupledPairView, RoseNoteView } from '@rose/ledger';
-import type { PositionView } from '@rose/positions';
+import type {
+  ClosePositionView,
+  OpenPositionView,
+  PositionReconciliationReport,
+  PositionView,
+} from '@rose/positions';
 import type { Mark } from '@rose/price-oracle';
 import { assertNotFloat } from '@rose/shared';
 import type { z } from 'zod/v4';
 import type {
+  ClosePositionViewSchema,
   CoupledPairSchema,
+  FlowPositionSchema,
+  OpenPositionViewSchema,
+  PositionReconciliationReportSchema,
   PositionSchema,
   PositionMarkSchema,
   RoseNoteSchema,
@@ -20,6 +29,12 @@ export type CoupledPairResponse = z.infer<typeof CoupledPairSchema>;
 export type RoseNoteResponse = z.infer<typeof RoseNoteSchema>;
 export type PositionResponse = z.infer<typeof PositionSchema>;
 export type PositionMarkResponse = z.infer<typeof PositionMarkSchema>;
+export type FlowPositionResponse = z.infer<typeof FlowPositionSchema>;
+export type OpenPositionViewResponse = z.infer<typeof OpenPositionViewSchema>;
+export type ClosePositionViewResponse = z.infer<typeof ClosePositionViewSchema>;
+export type PositionReconciliationReportResponse = z.infer<
+  typeof PositionReconciliationReportSchema
+>;
 
 // A smallest-unit magnitude → exact integer string. `assertNotFloat` guards that a `bigint` (never a
 // float) is what crosses the boundary (NFR-2).
@@ -145,5 +160,91 @@ export function serializePosition(
     createdAt: view.createdAt.toISOString(),
     updatedAt: view.updatedAt.toISOString(),
     mark,
+  };
+}
+
+/**
+ * Serialize the persisted position embedded in an open/close flow view (Stories 8.3/8.6). The lighter
+ * mirror of `serializePosition` WITHOUT a `mark` (the flow view records the lifecycle, not the P&L
+ * listing). Smallest-unit magnitudes → raw integer strings; entry/leverage → decimal strings; Date →
+ * ISO. `null` when the flow is still pending (no position exists before the commit point). NFR-2.
+ */
+function serializeFlowPosition(view: PositionView | null): FlowPositionResponse | null {
+  if (view === null) return null;
+  return {
+    id: view.id,
+    coupledPairId: view.coupledPairId,
+    owner: view.owner,
+    referenceAsset: view.referenceAsset,
+    side: view.side,
+    sizeUnits: smallestUnits(view.sizeUnits),
+    entryPrice: view.entryPrice,
+    collateral: smallestUnits(view.collateral),
+    leverage: view.leverage,
+    realizedPnl: smallestUnits(view.realizedPnl),
+    lifecycle: view.lifecycle,
+    createdAt: view.createdAt.toISOString(),
+    updatedAt: view.updatedAt.toISOString(),
+  };
+}
+
+/**
+ * Serialize an `OpenPositionView` to the wire shape (Story 8.3): the `amount` bigint → smallest-units
+ * string (NFR-2), the embedded position (once confirmed) via `serializeFlowPosition`. Stays `pending`
+ * until the on-chain commit point — no optimistic success.
+ */
+export function serializeOpenPositionView(view: OpenPositionView): OpenPositionViewResponse {
+  return {
+    id: view.id,
+    coupledPairId: view.coupledPairId,
+    owner: view.owner,
+    side: view.side,
+    amount: smallestUnits(view.amount),
+    paymentAsset: view.paymentAsset,
+    status: view.status,
+    txHash: view.txHash,
+    journalEntryId: view.journalEntryId,
+    position: serializeFlowPosition(view.position),
+  };
+}
+
+/**
+ * Serialize a `ClosePositionView` to the wire shape (Stories 8.3/8.6): the `amount` bigint →
+ * smallest-units string (NFR-2), the embedded position (CLOSED once confirmed) via
+ * `serializeFlowPosition`. Stays `pending` until the on-chain commit point — no optimistic success.
+ */
+export function serializeClosePositionView(view: ClosePositionView): ClosePositionViewResponse {
+  return {
+    id: view.id,
+    positionId: view.positionId,
+    coupledPairId: view.coupledPairId,
+    owner: view.owner,
+    amount: smallestUnits(view.amount),
+    paymentAsset: view.paymentAsset,
+    status: view.status,
+    txHash: view.txHash,
+    journalEntryId: view.journalEntryId,
+    position: serializeFlowPosition(view.position),
+  };
+}
+
+/**
+ * Serialize the position↔pair reconciliation report to the wire shape (Story 8.5, FR-27). The report
+ * from `@rose/positions` is already JSON-safe (NO bigint, NO float — amounts are integer strings), so
+ * this only copies its `readonly` arrays into the mutable shape the Zod response type expects.
+ */
+export function serializePositionReconciliationReport(
+  report: PositionReconciliationReport,
+): PositionReconciliationReportResponse {
+  return {
+    reconciledAt: report.reconciledAt,
+    source: report.source,
+    sideBacking: report.sideBacking.map((row) => ({ ...row })),
+    overExposedSides: report.overExposedSides.map((row) => ({ ...row })),
+    anyOverExposure: report.anyOverExposure,
+    mismatches: report.mismatches.map((row) => ({ ...row })),
+    anyMismatch: report.anyMismatch,
+    anyCorrected: report.anyCorrected,
+    corrections: report.corrections,
   };
 }

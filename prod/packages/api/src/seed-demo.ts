@@ -18,7 +18,10 @@ import {
   type CreateAccountInput,
   type RoseDb,
 } from '@rose/ledger';
+import { listPositionsByOwner } from '@rose/positions';
 import type { PaperModeConfig } from '@rose/rose-note';
+import { getAddress } from 'viem';
+import { makePaperPositionService } from './paper-position-service.js';
 
 /** A stable reference asset used as the idempotency key for the demo coupled pair. */
 const DEMO_REFERENCE_ASSET = 'DEMO/EUR-USD';
@@ -29,8 +32,16 @@ const DEMO_REFERENCE_ASSET = 'DEMO/EUR-USD';
 const PAPER_PAYMENT_ASSET = 'EUR';
 /** The curated allowlist-eligible subscriber address for the demo (FR-19 analogue). */
 const PAPER_ELIGIBLE_SUBSCRIBER = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+/**
+ * A SECOND curated allowlist-eligible owner. It holds the OPPOSITE (SHORT) leg of the SAME demo pair
+ * as `PAPER_ELIGIBLE_SUBSCRIBER` (LONG), establishing the §11.4 D1 topology: a single-side close of
+ * the LONG position is then refused live by the solvency guardrail (Story 8.6 — the headline test).
+ */
+const PAPER_ELIGIBLE_SUBSCRIBER_2 = '0xcccccccccccccccccccccccccccccccccccccccc';
 /** The holder whose paired legs a strategy reset retires in the demo. */
 const PAPER_POSITION_HOLDER = PAPER_ELIGIBLE_SUBSCRIBER;
+/** The smallest-units size of each seeded demo position (a sensible fraction of the demo pair's K). */
+const PAPER_DEMO_POSITION_AMOUNT = 100_000_000n;
 /** Parked floor m/g the reset threshold derives from (paper demo values, non-secret). */
 const PAPER_FLOOR = { modelFloorM: '0.5', modelFloorG: '0.4' } as const;
 /** A pre-existing minted position seeded on each token leg so redemptions / resets have supply to retire. */
@@ -196,10 +207,66 @@ async function seedInitialPosition(
 }
 
 /**
+ * Seeds two REAL demo positions through the paper position-service OPEN flow (so they are genuine
+ * confirmed positions, visible in `GET /positions` and exercisable by the close/reconcile routes),
+ * establishing the §11.4 D1 topology:
+ *   • `PAPER_ELIGIBLE_SUBSCRIBER` holds a LONG on the demo pair;
+ *   • `PAPER_ELIGIBLE_SUBSCRIBER_2` holds a SHORT on the SAME pair.
+ * A single-side close of the LONG is then refused LIVE by the solvency guardrail (Story 8.6). Both
+ * owners are allowlist-eligible (passed via `config.eligibleSubscribers`). Idempotent: skips once both
+ * owners already hold an OPEN position on the pair (the open flow is itself idempotent on its key too).
+ * Returns true when it opened at least one position.
+ */
+async function seedPaperDemoPositions(
+  db: RoseDb,
+  pairId: string,
+  config: Omit<PaperModeConfig, 'db'>,
+): Promise<boolean> {
+  const ownerLong = getAddress(PAPER_ELIGIBLE_SUBSCRIBER);
+  const ownerShort = getAddress(PAPER_ELIGIBLE_SUBSCRIBER_2);
+
+  const longHeld = (await listPositionsByOwner(db, { owner: ownerLong })).some(
+    (p) => p.coupledPairId === pairId && p.lifecycle === 'OPEN' && p.side === 'LONG',
+  );
+  const shortHeld = (await listPositionsByOwner(db, { owner: ownerShort })).some(
+    (p) => p.coupledPairId === pairId && p.lifecycle === 'OPEN' && p.side === 'SHORT',
+  );
+  if (longHeld && shortHeld) return false;
+
+  const service = makePaperPositionService({ db, paperConfig: config });
+  if (!longHeld) {
+    await service.openPosition({
+      coupledPairId: pairId,
+      owner: ownerLong,
+      side: 'LONG',
+      amount: PAPER_DEMO_POSITION_AMOUNT,
+      paymentAsset: config.paymentAsset,
+      idempotencyKey: `seed-demo-open-long-${pairId}`,
+    });
+  }
+  if (!shortHeld) {
+    await service.openPosition({
+      coupledPairId: pairId,
+      owner: ownerShort,
+      side: 'SHORT',
+      amount: PAPER_DEMO_POSITION_AMOUNT,
+      paymentAsset: config.paymentAsset,
+      idempotencyKey: `seed-demo-open-short-${pairId}`,
+    });
+  }
+  console.log(
+    `[seed] paper-mode demo positions ready — LONG ${ownerLong} + SHORT ${ownerShort} on pair ${pairId} ` +
+      '(the §11.4 D1 single-side-close guardrail topology).',
+  );
+  return true;
+}
+
+/**
  * Seeds everything the PAPER-MODE write flows need and returns the resolved composition config (the
  * `PaperModeConfig` minus `db`): the demo coupled pair / Rose Note, the EUR + ROSE_L/ROSE_S typed
- * accounts, an initial minted position to redeem/reset against, the eligible-subscriber allowlist, and
- * the parked floor. Idempotent — safe to run on every boot. NO secret.
+ * accounts, an initial minted position to redeem/reset against, the eligible-subscriber allowlist (two
+ * owners — the D1 topology), the seeded LONG/SHORT demo positions, and the parked floor. Idempotent —
+ * safe to run on every boot. NO secret.
  */
 export async function seedPaperDemo(db: RoseDb): Promise<Omit<PaperModeConfig, 'db'>> {
   await seedAccounts(db, DEMO_ACCOUNTS);
@@ -236,15 +303,22 @@ export async function seedPaperDemo(db: RoseDb): Promise<Omit<PaperModeConfig, '
 
   await seedInitialPosition(db, pairId, subscriptionTopology);
 
-  return {
+  const config: Omit<PaperModeConfig, 'db'> = {
     subscriptionTopology,
     redemptionTopology,
     strategyTopology,
-    eligibleSubscribers: [PAPER_ELIGIBLE_SUBSCRIBER],
+    // BOTH demo owners are allowlist-eligible (the LONG holder + the SHORT counterparty — D1 topology).
+    eligibleSubscribers: [PAPER_ELIGIBLE_SUBSCRIBER, PAPER_ELIGIBLE_SUBSCRIBER_2],
     paymentAsset: PAPER_PAYMENT_ASSET,
     positionHolder: PAPER_POSITION_HOLDER,
     floor: PAPER_FLOOR,
   };
+
+  // Seed the two REAL demo positions (LONG + opposing SHORT) so the §11.4 single-side-close guardrail
+  // is exercisable live. Uses the SAME paper position-service open flow the API exposes.
+  await seedPaperDemoPositions(db, pairId, config);
+
+  return config;
 }
 
 async function main(): Promise<void> {

@@ -6,14 +6,14 @@ import {
   type WriteStatus,
 } from '../../components/ui/confirm-action-panel.js';
 import { ApiClientError } from '../../lib/api-client.js';
-import type { CoupledPairPosition, Money } from '../../lib/contract-types.js';
+import type { CoupledPairPosition, Money, PositionSide } from '../../lib/contract-types.js';
 import { legTokenSymbols } from '../../lib/leg-symbols.js';
 import { deriveFloorUnits } from '../../lib/pair-math.js';
-import { useRedeem, useRedemption, useSubscribe, useSubscription } from '../../lib/queries.js';
+import { useOpenPosition, useOpenPositionFlow } from '../../lib/queries.js';
 
-// Paper/local demo defaults — the deployed flow reads the payment asset/scale from the Note/pair
-// config (ops-deferred, see deferred-work.md story-6.6). The subscribe/redeem amount crosses the wire
-// as a smallest-units integer STRING (NFR-2); this only formats it for display (BigInt-safe).
+// Paper/local demo defaults — the deployed flow reads the payment asset/scale from the pair config
+// (ops-deferred). The position-open amount crosses the wire as a smallest-units integer STRING
+// (NFR-2); this only formats it for display (BigInt-safe).
 const PAYMENT_ASSET = 'EUR';
 const PAYMENT_SCALE = 2;
 
@@ -37,31 +37,31 @@ function Row({ k, v, hl }: { k: string; v: string; hl?: boolean }): React.JSX.El
 }
 
 /**
- * The open/close write flow on the terminal (AC-3, UX-DR6, NFR-9). Reuses the pessimistic
- * `ConfirmActionPanel`: on Confirm it fires the real subscribe/redeem mutation, captures the pending
- * handle, and the panel stays **pending** ("Awaiting Sepolia confirmation…") while the status endpoint
- * is polled — it shows success ONLY once the polled status returns `confirmed` (no optimistic success).
- * A typed refusal (403/422/409/503) surfaces its machine `code`.
+ * The position-OPEN write flow on the terminal (Story 8.3, FR-25, UX-DR6, NFR-9). Reuses the
+ * pessimistic `ConfirmActionPanel`: on Confirm it fires the real `POST /positions/open` mutation,
+ * captures the pending flow handle, and the panel stays **pending** ("Awaiting Sepolia confirmation…")
+ * while `GET /positions/open/:id` is polled — it shows success ONLY once the polled flow reads
+ * `confirmed` (no optimistic success). A typed refusal (409/422/503) surfaces its machine `code` +
+ * message (e.g. a 503 `POSITION_SERVICE_UNAVAILABLE` ⇒ "not available on this deployment").
  */
-function TerminalWriteFlow({
-  action,
-  roseNoteId,
+function TerminalOpenFlow({
   pair,
+  side,
   owner,
+  pairSummary,
   onClose,
 }: {
-  action: 'subscribe' | 'redeem';
-  roseNoteId: string;
-  pair: PairSummary;
+  pair: CoupledPairPosition;
+  side: PositionSide;
   owner: string;
+  pairSummary: PairSummary;
   onClose: () => void;
 }): React.JSX.Element {
   const [amountUnits, setAmountUnits] = useState('100000');
-  const subscribeMut = useSubscribe();
-  const redeemMut = useRedeem();
+  const openMut = useOpenPosition();
   const [handle, setHandle] = useState('');
-  const subStatus = useSubscription(action === 'subscribe' ? handle : '');
-  const redStatus = useRedemption(action === 'redeem' ? handle : '');
+  const flow = useOpenPositionFlow(handle);
+  const statusData = flow.data;
 
   const amount: Money = {
     asset: PAYMENT_ASSET,
@@ -70,53 +70,37 @@ function TerminalWriteFlow({
     decimal: formatUnits(amountUnits, PAYMENT_SCALE),
   };
 
-  const mut = action === 'subscribe' ? subscribeMut : redeemMut;
-  const statusData = action === 'subscribe' ? subStatus.data : redStatus.data;
-
   let writeStatus: WriteStatus = 'idle';
   let errorCode: string | undefined;
-  if (mut.isError) {
+  let errorMessage: string | undefined;
+  if (openMut.isError) {
     writeStatus = 'failed';
-    errorCode = mut.error instanceof ApiClientError ? mut.error.code : 'REQUEST_FAILED';
+    errorCode = openMut.error instanceof ApiClientError ? openMut.error.code : 'REQUEST_FAILED';
+    errorMessage = openMut.error instanceof ApiClientError ? openMut.error.message : undefined;
   } else if (statusData?.status === 'confirmed') {
     writeStatus = 'confirmed';
   } else if (statusData?.status === 'failed') {
     writeStatus = 'failed';
     errorCode = 'WRITE_FAILED';
-  } else if (mut.isPending || handle.length > 0) {
+  } else if (openMut.isPending || handle.length > 0) {
     writeStatus = 'pending';
   }
 
   function onConfirm(): void {
-    // Include the owner so two distinct owners don't collide on one exactly-once key (NFR-9).
-    const idempotencyKey = `${action}:${roseNoteId}:${owner}:${amountUnits}`;
-    if (action === 'subscribe') {
-      subscribeMut.mutate(
-        {
-          roseNoteId,
-          body: {
-            subscriber: owner,
-            amount: amountUnits,
-            paymentAsset: PAYMENT_ASSET,
-            idempotencyKey,
-          },
-        },
-        { onSuccess: (s) => setHandle(s.id) },
-      );
-    } else {
-      redeemMut.mutate(
-        {
-          roseNoteId,
-          body: {
-            redeemer: owner,
-            amount: amountUnits,
-            paymentAsset: PAYMENT_ASSET,
-            idempotencyKey,
-          },
-        },
-        { onSuccess: (r) => setHandle(r.id) },
-      );
-    }
+    // A fresh idempotency key per submit (NFR-9 exactly-once); the owner+side scope keeps two distinct
+    // owners/sides from colliding on one key.
+    const idempotencyKey = `open:${pair.id}:${owner}:${side}:${amountUnits}:${Date.now()}`;
+    openMut.mutate(
+      {
+        coupledPairId: pair.id,
+        owner,
+        side,
+        amount: amountUnits,
+        paymentAsset: PAYMENT_ASSET,
+        idempotencyKey,
+      },
+      { onSuccess: (v) => setHandle(v.id) },
+    );
   }
 
   return (
@@ -134,12 +118,13 @@ function TerminalWriteFlow({
         </label>
       )}
       <ConfirmActionPanel
-        action={action}
+        action="subscribe"
         amount={amount}
         paymentAsset={PAYMENT_ASSET}
-        pair={pair}
+        pair={pairSummary}
         status={writeStatus}
         errorCode={errorCode}
+        errorMessage={errorMessage}
         onConfirm={onConfirm}
         onCancel={onClose}
       />
@@ -148,11 +133,12 @@ function TerminalWriteFlow({
 }
 
 /**
- * Right column. ROSE coins are issued as an ATOMIC L+S package (the core coupling invariant — a
- * naked single leg is impossible on-chain), so this is NOT a perp order ticket: it shows the
- * selected market's REAL package terms, a DISABLED / fixed-1x leverage selector (P0 pins leverage to
- * 1x), and Open/Close actions that pass the Review→Confirm panel (pending until the on-chain commit
- * point, UX-DR6). No fabricated balances, no optimistic write.
+ * Right column. ROSE coins are issued as an ATOMIC L+S package (the core coupling invariant — a naked
+ * single leg is impossible on-chain), so this is NOT a perp order ticket: it shows the selected
+ * market's REAL package terms, a LONG/SHORT direction selector + a DISABLED / fixed-1x leverage
+ * selector (P0 pins leverage to 1x), and an Open action that opens a directional POSITION (`POST
+ * /positions/open`) through the Review→Confirm panel (pending until the on-chain commit point, UX-DR6).
+ * Closing happens per position row in the positions table. No fabricated balances, no optimistic write.
  */
 export function OrderTicket({
   pair,
@@ -163,7 +149,8 @@ export function OrderTicket({
   owner?: string;
   onNavigate?: (surface: 'subscriber') => void;
 }): React.JSX.Element {
-  const [mode, setMode] = useState<'subscribe' | 'redeem' | null>(null);
+  const [open, setOpen] = useState(false);
+  const [side, setSide] = useState<PositionSide>('LONG');
 
   if (!pair) {
     return (
@@ -176,20 +163,20 @@ export function OrderTicket({
   const sym = legTokenSymbols(pair.referenceAsset);
   const floorUnits = deriveFloorUnits(pair.collateralPool, pair.floor).toString();
   const pairSummary: PairSummary = { referenceAsset: pair.referenceAsset, state: pair.state };
-  const canTrade = pair.noteId !== null && (owner ?? '').length > 0;
+  const canTrade = (owner ?? '').length > 0;
 
-  if (mode && pair.noteId !== null) {
+  if (open) {
     return (
       <div className="flex flex-col gap-3 p-4">
         <p className="text-[11px] font-semibold uppercase tracking-wider text-dim">
-          {mode === 'subscribe' ? 'Open position' : 'Close position'}
+          Open {side} position
         </p>
-        <TerminalWriteFlow
-          action={mode}
-          roseNoteId={pair.noteId}
-          pair={pairSummary}
+        <TerminalOpenFlow
+          pair={pair}
+          side={side}
           owner={owner ?? ''}
-          onClose={() => setMode(null)}
+          pairSummary={pairSummary}
+          onClose={() => setOpen(false)}
         />
       </div>
     );
@@ -215,6 +202,20 @@ export function OrderTicket({
         </dl>
       </div>
 
+      {/* Direction — the recorded off-chain directional side of the position (LONG | SHORT). */}
+      <label className="flex items-center justify-between gap-2 text-xs">
+        <span className="text-dim">Direction</span>
+        <select
+          aria-label="Position side"
+          value={side}
+          onChange={(e) => setSide(e.target.value as PositionSide)}
+          className="rounded-md border border-border bg-background px-2 py-1 font-numeric"
+        >
+          <option value="LONG">Long</option>
+          <option value="SHORT">Short</option>
+        </select>
+      </label>
+
       {/* Leverage selector — DISABLED / fixed-1x in P0 (leverage is modelled but pinned to 1x). */}
       <label className="flex items-center justify-between gap-2 text-xs">
         <span className="text-dim">Position leverage</span>
@@ -231,11 +232,8 @@ export function OrderTicket({
 
       {canTrade ? (
         <div className="flex items-center gap-2">
-          <Button variant="primary" onClick={() => setMode('subscribe')}>
+          <Button variant="primary" onClick={() => setOpen(true)}>
             Open position
-          </Button>
-          <Button variant="outline" onClick={() => setMode('redeem')}>
-            Close position
           </Button>
         </div>
       ) : onNavigate ? (

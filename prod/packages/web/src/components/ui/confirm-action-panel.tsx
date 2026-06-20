@@ -35,6 +35,7 @@ export function ConfirmActionPanel({
   pair,
   status,
   errorCode,
+  errorMessage,
   onConfirm,
   onCancel,
 }: {
@@ -44,6 +45,8 @@ export function ConfirmActionPanel({
   pair: PairSummary;
   status: WriteStatus;
   errorCode?: string;
+  /** The boundary's human-readable refusal message (e.g. the §11.4 guardrail text) — NAMED, not generic. */
+  errorMessage?: string;
   onConfirm: () => void;
   onCancel?: () => void;
 }): React.JSX.Element {
@@ -106,6 +109,7 @@ export function ConfirmActionPanel({
             <p role="alert" className="text-sm text-loss">
               ✗ {action === 'subscribe' ? 'Subscription' : 'Redemption'} refused —{' '}
               {errorCode ?? 'REQUEST_FAILED'}.
+              {errorMessage && <span className="mt-1 block font-normal">{errorMessage}</span>}
             </p>
           )}
         </div>

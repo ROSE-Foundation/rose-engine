@@ -353,6 +353,181 @@ export const PositionsQuerySchema = z.object({
   referenceAsset: z.string().min(1).optional().describe('Optional reference-asset narrowing.'),
 });
 
+// ─── Open/close a directional position (write — Stories 8.3/8.6, FR-25) ─────────────────────────
+
+/** A position open/close flow's lifecycle status (pending until commit, confirmed, or failed). */
+export const PositionFlowStatusSchema = z.enum(['pending', 'confirmed', 'failed']);
+
+/**
+ * The body of `POST /positions/open` (NFR-2: `amount` crosses the wire as a raw smallest-units INTEGER
+ * STRING, never a JS number/float). Opens a directional position over the REAL atomic subscribe/mint
+ * path; the owner receives BOTH legs of the paired package, `side` is the off-chain directional view.
+ */
+export const OpenPositionRequestSchema = z
+  .object({
+    coupledPairId: z
+      .string()
+      .uuid()
+      .describe('The ACTIVE coupled pair the position is layered over.'),
+    owner: EVM_ADDRESS.describe('Owner EVM address (holds both legs of the paired package).'),
+    side: PositionSideSchema.describe('The recorded directional side (off-chain synthetic view).'),
+    amount: POSITIVE_INTEGER_STRING.describe(
+      'Position size in smallest units, a positive integer string (NFR-2).',
+    ),
+    paymentAsset: z.string().min(1).describe('Payment/collateral asset.'),
+    idempotencyKey: z.string().min(1).describe('Idempotency key — exactly-once open (NFR-9).'),
+  })
+  .describe('A position-open request; the amount is a smallest-units string (NFR-2).');
+
+/**
+ * The body of `POST /positions/close` (whole-package / same-owner close over the redeem/burn path).
+ * Refused with a 409 `SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED` when the opposite leg is held by
+ * another user (the §11.4 D1 topology — Story 8.6), BEFORE any burn is submitted.
+ */
+export const ClosePositionRequestSchema = z
+  .object({
+    positionId: z.string().uuid().describe('The OPEN position to close.'),
+    paymentAsset: z.string().min(1).describe('Payment/collateral asset.'),
+    idempotencyKey: z.string().min(1).describe('Idempotency key — exactly-once close (NFR-9).'),
+  })
+  .describe('A position-close request (whole-package / same-owner).');
+
+/**
+ * The persisted position embedded in an open/close flow view, once confirmed (null while pending —
+ * no optimistic success). The lighter mirror of `PositionSchema` WITHOUT the live `mark` (the flow
+ * view records the lifecycle, not the P&L listing). Money values are strings (NFR-2).
+ */
+export const FlowPositionSchema = z
+  .object({
+    id: z.string().uuid(),
+    coupledPairId: z.string().uuid(),
+    owner: z.string(),
+    referenceAsset: z.string(),
+    side: PositionSideSchema,
+    sizeUnits: INTEGER_STRING.describe('Size/units — raw smallest-units string.'),
+    entryPrice: DECIMAL_STRING.describe('Entry = anchor P₀ (decimal string).'),
+    collateral: INTEGER_STRING.describe('Collateral — raw smallest-units string.'),
+    leverage: DECIMAL_STRING.describe('Leverage (decimal string; pinned 1x in P0).'),
+    realizedPnl: SIGNED_INTEGER_STRING.describe('Realized P&L — signed smallest-units string.'),
+    lifecycle: PositionLifecycleSchema,
+    createdAt: z.string().datetime(),
+    updatedAt: z.string().datetime(),
+  })
+  .describe('The persisted position embedded in a flow view (no mark); money values are strings.');
+
+/**
+ * An open-position flow as returned by `POST /positions/open` and `GET /positions/open/:id`. It stays
+ * `pending` (paired mint submitted on-chain, no journal entry, no position row) until the on-chain
+ * commit point flips it to `confirmed` (carrying the posted `journalEntryId` and the created
+ * `position`) — no optimistic success (UX-DR6). `amount` is a smallest-units integer string (NFR-2).
+ */
+export const OpenPositionViewSchema = z
+  .object({
+    id: z.string().describe('The idempotency key — the stable open-flow handle.'),
+    coupledPairId: z.string(),
+    owner: z.string(),
+    side: PositionSideSchema,
+    amount: INTEGER_STRING,
+    paymentAsset: z.string(),
+    status: PositionFlowStatusSchema,
+    txHash: z.string().nullable(),
+    journalEntryId: z.string().nullable(),
+    position: FlowPositionSchema.nullable(),
+  })
+  .describe('A position-open flow; pending until the on-chain commit point, then confirmed.');
+
+/**
+ * A close-position flow as returned by `POST /positions/close` and `GET /positions/close/:id`. It
+ * stays `pending` (paired burn submitted, position still OPEN) until the on-chain commit point flips
+ * it to `confirmed` (the position closes) — no optimistic success. `amount` is a smallest-units string.
+ */
+export const ClosePositionViewSchema = z
+  .object({
+    id: z.string().describe('The idempotency key — the stable close-flow handle.'),
+    positionId: z.string(),
+    coupledPairId: z.string(),
+    owner: z.string(),
+    amount: INTEGER_STRING,
+    paymentAsset: z.string(),
+    status: PositionFlowStatusSchema,
+    txHash: z.string().nullable(),
+    journalEntryId: z.string().nullable(),
+    position: FlowPositionSchema.nullable(),
+  })
+  .describe('A position-close flow; pending until the on-chain commit point, then confirmed.');
+
+/** The inferred wire types of the position-flow views (the surface consumer's response types). */
+export type OpenPositionViewResponse = z.infer<typeof OpenPositionViewSchema>;
+export type ClosePositionViewResponse = z.infer<typeof ClosePositionViewSchema>;
+export type FlowPositionResponse = z.infer<typeof FlowPositionSchema>;
+
+/** A `:id` path parameter for a position-flow id (the idempotency key — a non-empty string). */
+export const PositionFlowIdParamSchema = z.object({ id: z.string().min(1) });
+
+// ─── Position ↔ pair reconciliation (operator — Story 8.5, FR-27) ───────────────────────────────
+
+/** A per-(pair, side) residual-backing solvency row; amounts are exact integer strings (NFR-2). */
+const SideBackingSchema = z.object({
+  coupledPairId: z.string(),
+  referenceAsset: z.string(),
+  side: PositionSideSchema,
+  backing: INTEGER_STRING.describe('Residual collateral backing of this side (its leg value).'),
+  exposure: INTEGER_STRING.describe(
+    'Aggregate off-chain exposure (Σ collateral of OPEN positions).',
+  ),
+  headroom: SIGNED_INTEGER_STRING.describe('backing − exposure (signed; negative ⇒ over-exposed).'),
+  overExposed: z.boolean(),
+  overExposedBy: INTEGER_STRING.describe('max(0, exposure − backing).'),
+  openPositionCount: z.number().int().nonnegative(),
+});
+
+/** An over-exposed (pair, side), surfaced so cross-pair/cross-side headroom can never mask it. */
+const OverExposedSideSchema = z.object({
+  coupledPairId: z.string(),
+  side: PositionSideSchema,
+  overExposedBy: INTEGER_STRING,
+});
+
+/** A position↔pair mismatch and its correction outcome (surfaced — never silent). */
+const PositionMismatchSchema = z.object({
+  positionId: z.string(),
+  coupledPairId: z.string(),
+  owner: z.string(),
+  side: PositionSideSchema,
+  voidedCollateral: INTEGER_STRING,
+  corrected: z.boolean(),
+  correctable: z.boolean(),
+  journalEntryId: z.string().nullable(),
+  reason: z.string().nullable(),
+});
+
+/**
+ * The full position↔pair reconciliation report returned by `POST /positions/reconcile` (FR-27). A
+ * pure, JSON-serialisable report (NO bigint, NO float): the per-(pair, side) residual-backing
+ * solvency (report-only) + any position↔pair mismatches. Called with NO chain-closed facts here, so
+ * it is a read-only operator report (no correcting entries are posted).
+ */
+export const PositionReconciliationReportSchema = z
+  .object({
+    reconciledAt: z.string(),
+    source: z.literal('positions+pairs+chain'),
+    sideBacking: z.array(SideBackingSchema),
+    overExposedSides: z.array(OverExposedSideSchema),
+    anyOverExposure: z.boolean(),
+    mismatches: z.array(PositionMismatchSchema),
+    anyMismatch: z.boolean(),
+    anyCorrected: z.boolean(),
+    corrections: z.number().int().nonnegative(),
+  })
+  .describe(
+    'The position↔pair reconciliation report (FR-27); amounts are integer strings (NFR-2).',
+  );
+
+/** The inferred wire type of the reconciliation report. */
+export type PositionReconciliationReportResponse = z.infer<
+  typeof PositionReconciliationReportSchema
+>;
+
 // ─── Coupled-pair strategy execution (write — Story 6.4, FR-20) ─────────────────────────────────
 
 // A NON-negative smallest-units integer string (no sign) — a leg mark value may be 0 (total loss).

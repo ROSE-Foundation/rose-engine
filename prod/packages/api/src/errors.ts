@@ -64,6 +64,9 @@ const ERROR_REGISTRY: Readonly<Record<string, Mapping>> = Object.freeze({
   AccountNotFoundError: { status: 404 },
   OutboxEventNotFoundError: { status: 404 },
   RoseNoteNotFoundError: { status: 404 },
+  // Epic-8 position flow (Stories 8.3/8.6): an absent pair/position the open/close referenced.
+  PositionPairNotFoundError: { status: 404 },
+  PositionNotFoundError: { status: 404 },
   NotFoundError: { status: 404, code: 'NOT_FOUND' },
 
   // ── 403 recipient eligibility rejection (FR-19 — the subscriber cannot receive tokens) ──
@@ -104,6 +107,11 @@ const ERROR_REGISTRY: Readonly<Record<string, Mapping>> = Object.freeze({
   RedemptionIdempotencyConflictError: { status: 409 },
   StrategyResetIdempotencyConflictError: { status: 409 },
   CoupledPairResetStateError: { status: 409 },
+  // Epic-8 position flow (Stories 8.3/8.6): a non-ACTIVE pair, a reused idempotency key with a
+  // different request, or a re-close of a non-OPEN position — all invariant/lifecycle conflicts.
+  PositionPairNotActiveError: { status: 409 },
+  PositionIdempotencyConflictError: { status: 409 },
+  PositionLifecycleError: { status: 409 },
   // §11.4 solvency guardrail (Story 8.6): the independent single-side close (D1 topology — the
   // opposite leg held by another user) is fail-closed until the §8 Q8 counterparty/inventory model
   // lands. A named refusal (UX-DR5), not a silent failure; the message names the guardrail rule.

@@ -1,14 +1,20 @@
 import {
   useMutation,
   useQuery,
+  useQueryClient,
   type UseMutationResult,
   type UseQueryResult,
 } from '@tanstack/react-query';
 import { createContext, useContext } from 'react';
 import type { ApiClient } from './api-client.js';
 import type {
+  ClosePositionRequest,
+  ClosePositionView,
   CoupledPairResponse,
   GroupViewResponse,
+  OpenPositionRequest,
+  OpenPositionView,
+  PositionReconciliationReport,
   PositionsResponse,
   RedeemRequest,
   RedemptionResponse,
@@ -129,4 +135,81 @@ export function useRedemption(id: string): UseQueryResult<RedemptionResponse, Er
     enabled: id.length > 0,
     refetchInterval: (query) => pollWhilePending(query.state.data?.status),
   });
+}
+
+// ─── Position open/close + operator reconcile (Stories 8.3/8.5/8.6, FR-25/FR-27) ────────────────
+
+/**
+ * Open-position mutation (FR-25, UX-DR6) — the Exchange-terminal Open fires this. It returns the
+ * `pending` flow handle (no optimistic success); the caller polls `useOpenPositionFlow` until the
+ * on-chain commit point flips it to `confirmed`. A 409/503 surfaces as a typed `ApiClientError`.
+ */
+export function useOpenPosition(): UseMutationResult<OpenPositionView, Error, OpenPositionRequest> {
+  const client = useApiClient();
+  return useMutation({ mutationFn: (body) => client.openPosition(body) });
+}
+
+/**
+ * Close-position mutation (FR-25, Story 8.6) — fired per position row. A D1 single-side close is
+ * refused with a typed 409 `SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED` the surface NAMES (UX-DR5).
+ */
+export function useClosePosition(): UseMutationResult<
+  ClosePositionView,
+  Error,
+  ClosePositionRequest
+> {
+  const client = useApiClient();
+  return useMutation({ mutationFn: (body) => client.closePosition(body) });
+}
+
+/**
+ * Poll a position-open flow (pending → confirmed). Once it reads `confirmed`, the live positions
+ * listing is invalidated so the new position appears with its mark/P&L. Stops polling once resolved.
+ */
+export function useOpenPositionFlow(id: string): UseQueryResult<OpenPositionView, Error> {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ['position-open-flow', id],
+    queryFn: async () => {
+      const view = await client.getOpenPositionFlow(id);
+      if (view.status === 'confirmed') {
+        await queryClient.invalidateQueries({ queryKey: ['positions'] });
+      }
+      return view;
+    },
+    enabled: id.length > 0,
+    refetchInterval: (query) => pollWhilePending(query.state.data?.status),
+  });
+}
+
+/**
+ * Poll a position-close flow (pending → confirmed). Once confirmed, the live positions listing is
+ * invalidated so the closed position drops out / re-reads its lifecycle. Stops polling once resolved.
+ */
+export function useClosePositionFlow(id: string): UseQueryResult<ClosePositionView, Error> {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ['position-close-flow', id],
+    queryFn: async () => {
+      const view = await client.getClosePositionFlow(id);
+      if (view.status === 'confirmed') {
+        await queryClient.invalidateQueries({ queryKey: ['positions'] });
+      }
+      return view;
+    },
+    enabled: id.length > 0,
+    refetchInterval: (query) => pollWhilePending(query.state.data?.status),
+  });
+}
+
+/** Operator position↔pair reconciliation (FR-27) — fired on demand from the operator panel. */
+export function useReconcilePositions(): UseMutationResult<
+  PositionReconciliationReport,
+  Error,
+  void
+> {
+  const client = useApiClient();
+  return useMutation({ mutationFn: () => client.reconcilePositions() });
 }

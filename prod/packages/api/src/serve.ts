@@ -32,6 +32,7 @@ import type { PriceOracle, PriceQuote } from '@rose/price-oracle';
 import { makePaperModeServices, PAPER_MODE_BANNER } from '@rose/rose-note';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildApp, type ApiDeps, type MarkTrustInputs } from './app.js';
+import { makePaperPositionService } from './paper-position-service.js';
 import { seedPaperDemo } from './seed-demo.js';
 
 /**
@@ -268,6 +269,10 @@ async function main(): Promise<void> {
     console.log('[serve] paper mode: seeding demo data + composing simulated write services…');
     const paperConfig = await seedPaperDemo(db);
     const paper = makePaperModeServices({ db, ...paperConfig });
+    // The Epic-8 position layer (open/close + the §11.4 guardrail) over the SAME paper transport. It
+    // is composed here (in @rose/api) — NOT in @rose/rose-note — because @rose/positions already
+    // depends on @rose/rose-note + @rose/chain (composing it there would be an import cycle).
+    const positionService = makePaperPositionService({ db, paperConfig });
     deps = {
       db,
       logger: true,
@@ -275,13 +280,14 @@ async function main(): Promise<void> {
       subscriptions: paper.subscriptions,
       redemptions: paper.redemptions,
       strategy: paper.strategy,
+      positionService,
       // The position P&L endpoint shows LIVE marks in paper mode (anchor-replay oracle, §15 trust).
       priceOracle: makePaperAnchorReplayOracle(db),
       markTrust: PAPER_MARK_TRUST,
     };
     console.log(
-      '[serve] paper mode ACTIVE — subscribe/redeem/strategy are fully interactive; ' +
-        'on-chain effects are SIMULATED in-process (no Sepolia, no secret).',
+      '[serve] paper mode ACTIVE — subscribe/redeem/strategy + position open/close are fully ' +
+        'interactive; on-chain effects are SIMULATED in-process (no Sepolia, no secret).',
     );
   } else {
     console.log(

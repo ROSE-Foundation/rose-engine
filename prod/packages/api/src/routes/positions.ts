@@ -10,14 +10,68 @@
 // 8.1 state with null trusted fields. Fail-closed: an oracle configured WITHOUT a trust input ⇒ a
 // typed 503 (never silently default a trust bound).
 import { getCoupledPair } from '@rose/ledger';
-import { listPositionsByOwner } from '@rose/positions';
+import {
+  listPositionsByOwner,
+  reconcilePositionsToPairs,
+  type PositionService,
+} from '@rose/positions';
 import { markToMarket, type MarkablePair } from '@rose/price-oracle';
 import type { FastifyPluginAsyncZod } from 'fastify-type-provider-zod';
+import { getAddress } from 'viem';
 import type { ApiDeps } from '../app.js';
-import { ApiError } from '../errors.js';
-import { ErrorResponseSchema, PositionsQuerySchema, PositionsResponseSchema } from '../schemas.js';
-import { noFeedMarkResponse, serializeMark, serializePosition } from '../serializers.js';
+import { ApiError, NotFoundError } from '../errors.js';
+
+/**
+ * Canonicalize an owner to the EIP-55 checksum form so reads match what the open path stores (positions
+ * persist the checksummed owner). Without this, a lowercase query — exactly what the SPA sends from its
+ * baked-in `VITE_SUBSCRIBER_ADDRESS` — would never match a stored mixed-case owner and the listing would
+ * be silently empty. Lenient by design: a value that is not a parseable EVM address is returned
+ * unchanged (it simply matches nothing, as before — no behavioural/contract change for non-address keys).
+ */
+function canonicalOwner(owner: string): string {
+  try {
+    return getAddress(owner);
+  } catch {
+    return owner;
+  }
+}
+import {
+  ClosePositionRequestSchema,
+  ClosePositionViewSchema,
+  ErrorResponseSchema,
+  OpenPositionRequestSchema,
+  OpenPositionViewSchema,
+  PositionFlowIdParamSchema,
+  PositionReconciliationReportSchema,
+  PositionsQuerySchema,
+  PositionsResponseSchema,
+} from '../schemas.js';
+import {
+  noFeedMarkResponse,
+  serializeClosePositionView,
+  serializeMark,
+  serializeOpenPositionView,
+  serializePosition,
+  serializePositionReconciliationReport,
+} from '../serializers.js';
 import type { PositionMarkResponse } from '../serializers.js';
+
+/**
+ * Resolve the Epic-8 position service, or refuse with a typed 503 (refuse-if-absent). The open/close
+ * write paths and the operator reconcile route are composed ONLY in paper mode (`ENGINE_MODE=paper`);
+ * a read-only / non-paper deployment never exposes them — the `GET /positions` P&L read is unaffected.
+ */
+function requirePositionService(deps: ApiDeps): PositionService {
+  if (deps.positionService === undefined) {
+    throw new ApiError(
+      503,
+      'POSITION_SERVICE_UNAVAILABLE',
+      'The position open/close service is not configured on this deployment (paper composition not ' +
+        'wired). Set ENGINE_MODE=paper for the fully interactive simulated environment.',
+    );
+  }
+  return deps.positionService;
+}
 
 export function positionRoutes(deps: ApiDeps): FastifyPluginAsyncZod {
   return async (app) => {
@@ -36,7 +90,8 @@ export function positionRoutes(deps: ApiDeps): FastifyPluginAsyncZod {
         },
       },
       async (request) => {
-        const { owner, referenceAsset } = request.query;
+        const { referenceAsset } = request.query;
+        const owner = canonicalOwner(request.query.owner);
         const oracle = deps.priceOracle;
         const trust = deps.markTrust;
 
@@ -84,6 +139,142 @@ export function positionRoutes(deps: ApiDeps): FastifyPluginAsyncZod {
         }
 
         return { owner, positions };
+      },
+    );
+
+    // ─── Open a directional position (Story 8.3, FR-25) — paired mint over subscribe/mint ─────────
+    app.post(
+      '/positions/open',
+      {
+        schema: {
+          summary: 'Open a directional position (paired mint, paper)',
+          tags: ['write'],
+          body: OpenPositionRequestSchema,
+          response: {
+            200: OpenPositionViewSchema,
+            403: ErrorResponseSchema,
+            404: ErrorResponseSchema,
+            409: ErrorResponseSchema,
+            422: ErrorResponseSchema,
+            503: ErrorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        const service = requirePositionService(deps);
+        const body = request.body;
+        const view = await service.openPosition({
+          coupledPairId: body.coupledPairId,
+          owner: body.owner,
+          side: body.side,
+          amount: BigInt(body.amount),
+          paymentAsset: body.paymentAsset,
+          idempotencyKey: body.idempotencyKey,
+        });
+        return serializeOpenPositionView(view);
+      },
+    );
+
+    // ─── Close a position (Stories 8.3/8.6, FR-25) — paired burn over redeem/burn ─────────────────
+    // The §11.4 solvency guardrail (D1 single-side topology — the opposite leg held by another user)
+    // surfaces a 409 `SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED` via the boundary error registry,
+    // BEFORE any burn is submitted (the headline Epic-8.6 live test).
+    app.post(
+      '/positions/close',
+      {
+        schema: {
+          summary: 'Close a position (paired burn, paper); §11.4 single-side close refused (409)',
+          tags: ['write'],
+          body: ClosePositionRequestSchema,
+          response: {
+            200: ClosePositionViewSchema,
+            404: ErrorResponseSchema,
+            409: ErrorResponseSchema,
+            422: ErrorResponseSchema,
+            503: ErrorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        const service = requirePositionService(deps);
+        const body = request.body;
+        const view = await service.closePosition({
+          positionId: body.positionId,
+          paymentAsset: body.paymentAsset,
+          idempotencyKey: body.idempotencyKey,
+        });
+        return serializeClosePositionView(view);
+      },
+    );
+
+    // ─── Read an open-flow status (pending until the on-chain commit point) ───────────────────────
+    app.get(
+      '/positions/open/:id',
+      {
+        schema: {
+          summary: 'Read a position-open flow status (pending until the on-chain commit point)',
+          tags: ['read'],
+          params: PositionFlowIdParamSchema,
+          response: {
+            200: OpenPositionViewSchema,
+            404: ErrorResponseSchema,
+            503: ErrorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        const service = requirePositionService(deps);
+        const { id } = request.params;
+        const view = await service.getOpenPosition(id);
+        if (view === null) {
+          throw new NotFoundError(`Position-open flow '${id}' not found.`, { id });
+        }
+        return serializeOpenPositionView(view);
+      },
+    );
+
+    // ─── Read a close-flow status (pending until the on-chain commit point) ───────────────────────
+    app.get(
+      '/positions/close/:id',
+      {
+        schema: {
+          summary: 'Read a position-close flow status (pending until the on-chain commit point)',
+          tags: ['read'],
+          params: PositionFlowIdParamSchema,
+          response: {
+            200: ClosePositionViewSchema,
+            404: ErrorResponseSchema,
+            503: ErrorResponseSchema,
+          },
+        },
+      },
+      async (request) => {
+        const service = requirePositionService(deps);
+        const { id } = request.params;
+        const view = await service.getClosePosition(id);
+        if (view === null) {
+          throw new NotFoundError(`Position-close flow '${id}' not found.`, { id });
+        }
+        return serializeClosePositionView(view);
+      },
+    );
+
+    // ─── Operator: position ↔ pair reconciliation (Story 8.5, FR-27) ──────────────────────────────
+    // A pure per-(pair, side) residual-backing + mismatch REPORT (called with NO chain-closed facts,
+    // so it posts NO correcting entries). Gated on the position service being composed (paper-only).
+    app.post(
+      '/positions/reconcile',
+      {
+        schema: {
+          summary: 'Operator position↔pair reconciliation report (report-only)',
+          tags: ['read'],
+          response: { 200: PositionReconciliationReportSchema, 503: ErrorResponseSchema },
+        },
+      },
+      async () => {
+        requirePositionService(deps);
+        const report = await reconcilePositionsToPairs(deps.db, {});
+        return serializePositionReconciliationReport(report);
       },
     );
   };

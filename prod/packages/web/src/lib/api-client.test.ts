@@ -205,4 +205,120 @@ describe('createApiClient', () => {
       status: 503,
     });
   });
+
+  it('openPosition POSTs to /positions/open with the smallest-units string amount (Story 8.3)', async () => {
+    const pending = {
+      id: 'idem-open-1',
+      coupledPairId: 'pair-1',
+      owner: '0x' + 'a'.repeat(40),
+      side: 'LONG' as const,
+      amount: '100000',
+      paymentAsset: 'EUR',
+      status: 'pending' as const,
+      txHash: null,
+      journalEntryId: null,
+      position: null,
+    };
+    const fetchFn = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => jsonResponse(pending),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    const res = await client.openPosition({
+      coupledPairId: 'pair-1',
+      owner: '0x' + 'a'.repeat(40),
+      side: 'LONG',
+      amount: '100000',
+      paymentAsset: 'EUR',
+      idempotencyKey: 'idem-open-1',
+    });
+    expect(res.status).toBe('pending');
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api.local/positions/open');
+    expect(init?.method).toBe('POST');
+    expect(String(init?.body)).toContain('"amount":"100000"');
+  });
+
+  it('closePosition POSTs to /positions/close', async () => {
+    const pending = {
+      id: 'idem-close-1',
+      positionId: 'pos-1',
+      coupledPairId: 'pair-1',
+      owner: '0x' + 'a'.repeat(40),
+      amount: '100000',
+      paymentAsset: 'EUR',
+      status: 'pending' as const,
+      txHash: null,
+      journalEntryId: null,
+      position: null,
+    };
+    const fetchFn = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => jsonResponse(pending),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    const res = await client.closePosition({
+      positionId: 'pos-1',
+      paymentAsset: 'EUR',
+      idempotencyKey: 'idem-close-1',
+    });
+    expect(res.positionId).toBe('pos-1');
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api.local/positions/close');
+    expect(init?.method).toBe('POST');
+  });
+
+  it('closePosition surfaces the §11.4 single-side guardrail 409 as a typed, rule-named ApiClientError', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse(
+        {
+          error: {
+            code: 'SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED',
+            message: '§11.4 solvency guardrail: opposite leg held by another user.',
+          },
+        },
+        409,
+      ),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    const err = await client
+      .closePosition({ positionId: 'pos-1', paymentAsset: 'EUR', idempotencyKey: 'k' })
+      .catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(ApiClientError);
+    expect((err as ApiClientError).code).toBe('SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED');
+    expect((err as ApiClientError).status).toBe(409);
+    expect((err as ApiClientError).message).toContain('§11.4');
+  });
+
+  it('reconcilePositions POSTs to /positions/reconcile and returns the report', async () => {
+    const report = {
+      reconciledAt: '2026-06-16T12:00:00.000Z',
+      source: 'positions+pairs+chain' as const,
+      sideBacking: [],
+      overExposedSides: [],
+      anyOverExposure: false,
+      mismatches: [],
+      anyMismatch: false,
+      anyCorrected: false,
+      corrections: 0,
+    };
+    const fetchFn = vi.fn<(url: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () => jsonResponse(report),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    const res = await client.reconcilePositions();
+    expect(res.source).toBe('positions+pairs+chain');
+    const [url, init] = fetchFn.mock.calls[0]!;
+    expect(url).toBe('http://api.local/positions/reconcile');
+    expect(init?.method).toBe('POST');
+  });
+
+  it('reconcilePositions parses the 503 POSITION_SERVICE_UNAVAILABLE envelope (non-paper deployment)', async () => {
+    const fetchFn = vi.fn(async () =>
+      jsonResponse({ error: { code: 'POSITION_SERVICE_UNAVAILABLE', message: 'Not wired.' } }, 503),
+    );
+    const client = createApiClient({ baseUrl: 'http://api.local', fetchFn });
+    await expect(client.reconcilePositions()).rejects.toMatchObject({
+      code: 'POSITION_SERVICE_UNAVAILABLE',
+      status: 503,
+    });
+  });
 });

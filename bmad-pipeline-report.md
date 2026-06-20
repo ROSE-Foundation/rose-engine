@@ -1041,7 +1041,6 @@ would go negative). No leg goes negative while within the barrier. This is exact
 conditional issuer-neutrality the PRD names as the key model risk (§15) — confirmed, not refuted,
 within its stated bounds.
 
-
 ---
 
 # BMAD Pipeline Report — Epic 8: Secondary-Trading Position Layer (§4.8) — 2026-06-19
@@ -1052,14 +1051,14 @@ within its stated bounds.
 
 ## Per-story results
 
-| Story | Title | Status | Tests (cumulative) | Migration |
-|-------|-------|--------|--------------------|-----------|
-| 8.1 | Substitutable price-oracle port + mark-to-market service | ✅ done | 840 | — |
-| 8.2 | Persist per-user position model (leverage pinned 1x) | ✅ done | 859 | `0009-positions` |
-| 8.3 | Open/close over the atomic subscribe/redeem package flow | ✅ done | 874 | — |
-| 8.4 | Position P&L API + live Exchange-terminal wiring | ✅ done | 899 | — |
-| 8.5 | Position↔pair reconciliation (per-pair/per-side residual-backing) | ✅ done | 910 | — |
-| 8.6 | Solvency guardrail for independent single-side close (§8 Q8) | ✅ done | 916 | — |
+| Story | Title                                                             | Status  | Tests (cumulative) | Migration        |
+| ----- | ----------------------------------------------------------------- | ------- | ------------------ | ---------------- |
+| 8.1   | Substitutable price-oracle port + mark-to-market service          | ✅ done | 840                | —                |
+| 8.2   | Persist per-user position model (leverage pinned 1x)              | ✅ done | 859                | `0009-positions` |
+| 8.3   | Open/close over the atomic subscribe/redeem package flow          | ✅ done | 874                | —                |
+| 8.4   | Position P&L API + live Exchange-terminal wiring                  | ✅ done | 899                | —                |
+| 8.5   | Position↔pair reconciliation (per-pair/per-side residual-backing) | ✅ done | 910                | —                |
+| 8.6   | Solvency guardrail for independent single-side close (§8 Q8)      | ✅ done | 916                | —                |
 
 ## What was built
 
@@ -1073,15 +1072,15 @@ within its stated bounds.
 
 ## Final gate (whole tree, orchestrator-verified)
 
-| Gate step | Result |
-|-----------|--------|
-| `pnpm typecheck` (`tsc -b`) | ✅ pass |
-| `pnpm lint` (`eslint .`) | ✅ pass |
-| `pnpm test` (`vitest run`) | ✅ **916 passed / 106 files** |
-| `pnpm format` + `pnpm format:check` | ✅ pass |
-| `pnpm check:regime` | ✅ pass (`/prod` ↮ `/throwaway`) |
-| `pnpm check:migrations` (up→down→up) | ✅ pass (9 migrations) |
-| `forge test` (`prod/contracts`) | ✅ **171 passed** |
+| Gate step                            | Result                           |
+| ------------------------------------ | -------------------------------- |
+| `pnpm typecheck` (`tsc -b`)          | ✅ pass                          |
+| `pnpm lint` (`eslint .`)             | ✅ pass                          |
+| `pnpm test` (`vitest run`)           | ✅ **916 passed / 106 files**    |
+| `pnpm format` + `pnpm format:check`  | ✅ pass                          |
+| `pnpm check:regime`                  | ✅ pass (`/prod` ↮ `/throwaway`) |
+| `pnpm check:migrations` (up→down→up) | ✅ pass (9 migrations)           |
+| `forge test` (`prod/contracts`)      | ✅ **171 passed**                |
 
 The deployed coupling contracts were **not modified** (no re-audit). PostgreSQL on host port 5544 left migrated + seeded.
 

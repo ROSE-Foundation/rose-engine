@@ -1,3 +1,4 @@
+import { Button } from '../../components/ui/button.js';
 import { DeltaIndicator } from '../../components/ui/delta-indicator.js';
 import { StatusBadge } from '../../components/ui/status-badge.js';
 import { TBody, TD, TH, THead, TR, Table } from '../../components/ui/table.js';
@@ -66,8 +67,11 @@ function PnlCell({ mark }: { mark: PositionMark }): React.JSX.Element {
  */
 export function PositionsTable({
   positions,
+  onClose,
 }: {
   positions: readonly Position[];
+  /** When provided, each OPEN row exposes a Close action that hands its position to the close flow. */
+  onClose?: (position: Position) => void;
 }): React.JSX.Element {
   if (positions.length === 0) {
     return <p className="text-muted-foreground">No open positions.</p>;
@@ -83,6 +87,7 @@ export function PositionsTable({
           <TH>Mark</TH>
           <TH>P&amp;L</TH>
           <TH>Distance to floor</TH>
+          {onClose && <TH>Action</TH>}
         </TR>
       </THead>
       <TBody>
@@ -110,6 +115,21 @@ export function PositionsTable({
                 <span className="text-dim">—</span>
               )}
             </TD>
+            {onClose && (
+              <TD>
+                {p.lifecycle === 'OPEN' ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => onClose(p)}
+                    aria-label={`Close ${p.side} ${p.referenceAsset} position`}
+                  >
+                    Close
+                  </Button>
+                ) : (
+                  <span className="text-dim">—</span>
+                )}
+              </TD>
+            )}
           </TR>
         ))}
       </TBody>

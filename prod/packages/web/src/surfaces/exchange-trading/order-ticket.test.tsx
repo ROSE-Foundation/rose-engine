@@ -6,9 +6,9 @@ import { userEvent } from '@testing-library/user-event';
 import type { ReactNode } from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { type ApiClient } from '../../lib/api-client.js';
-import type { CoupledPairPosition, SubscribeRequest } from '../../lib/contract-types.js';
+import type { CoupledPairPosition, OpenPositionRequest } from '../../lib/contract-types.js';
 import { ApiClientProvider } from '../../lib/queries.js';
-import { confirmedSubscription, pendingSubscription } from '../../test/fixtures.js';
+import { confirmedOpenPosition, pendingOpenPosition } from '../../test/fixtures.js';
 import { OrderTicket } from './order-ticket.js';
 
 const ADDRESS = `0x${'a'.repeat(40)}`;
@@ -37,7 +37,7 @@ function wrap(client: Partial<ApiClient>, ui: ReactNode): React.JSX.Element {
   );
 }
 
-describe('OrderTicket — disabled-1x leverage + Review→Confirm open/close (Story 8.4, AC-3)', () => {
+describe('OrderTicket — position open via Review→Confirm + disabled-1x leverage (Story 8.3)', () => {
   it('renders a DISABLED, fixed-1x leverage selector in P0', () => {
     render(wrap({}, <OrderTicket pair={pair()} owner={ADDRESS} />));
     const selector = screen.getByRole('combobox', { name: /position leverage/i });
@@ -45,16 +45,13 @@ describe('OrderTicket — disabled-1x leverage + Review→Confirm open/close (St
     expect(screen.getByText(/1× \(fixed\)/i)).toBeInTheDocument();
   });
 
-  it('Open stays pending (no optimistic success) while the status endpoint is still pending', async () => {
-    // The status endpoint never flips to confirmed ⇒ the panel must NOT show success.
-    const getSubscription = vi.fn(() => Promise.resolve(pendingSubscription()));
-    const subscribe = vi.fn<
-      (
-        roseNoteId: string,
-        body: SubscribeRequest,
-      ) => Promise<ReturnType<typeof pendingSubscription>>
-    >(() => Promise.resolve(pendingSubscription()));
-    const client: Partial<ApiClient> = { subscribe, getSubscription };
+  it('Open fires POST /positions/open with the right body and stays pending until confirmed', async () => {
+    // The flow status never flips to confirmed ⇒ the panel must NOT show optimistic success.
+    const getOpenPositionFlow = vi.fn(() => Promise.resolve(pendingOpenPosition()));
+    const openPosition = vi.fn<
+      (body: OpenPositionRequest) => Promise<ReturnType<typeof pendingOpenPosition>>
+    >(() => Promise.resolve(pendingOpenPosition()));
+    const client: Partial<ApiClient> = { openPosition, getOpenPositionFlow };
     render(wrap(client, <OrderTicket pair={pair()} owner={ADDRESS} />));
 
     await userEvent.click(screen.getByRole('button', { name: /open position/i }));
@@ -65,20 +62,41 @@ describe('OrderTicket — disabled-1x leverage + Review→Confirm open/close (St
     expect(await screen.findByText(/awaiting sepolia confirmation/i)).toBeInTheDocument();
     // No optimistic success: confirmed text never appears while the poll says pending.
     expect(screen.queryByText(/subscription confirmed/i)).not.toBeInTheDocument();
-    expect(subscribe).toHaveBeenCalledTimes(1);
-    // The amount crossed the wire as a smallest-units STRING (NFR-2), never a number.
-    expect(typeof subscribe.mock.calls[0]![1].amount).toBe('string');
+
+    expect(openPosition).toHaveBeenCalledTimes(1);
+    const body = openPosition.mock.calls[0]![0];
+    expect(body.coupledPairId).toBe('pair-1');
+    expect(body.owner).toBe(ADDRESS);
+    expect(body.side).toBe('LONG');
+    expect(body.paymentAsset).toBe('EUR');
+    // NFR-2: the amount crosses the wire as a smallest-units STRING, never a number.
+    expect(typeof body.amount).toBe('string');
+    expect(body.idempotencyKey.length).toBeGreaterThan(0);
   });
 
-  it('shows success only once the polled status returns confirmed (the commit point)', async () => {
-    const getSubscription = vi.fn(() => Promise.resolve(confirmedSubscription()));
-    const subscribe = vi.fn<
-      (
-        roseNoteId: string,
-        body: SubscribeRequest,
-      ) => Promise<ReturnType<typeof pendingSubscription>>
-    >(() => Promise.resolve(pendingSubscription()));
-    const client: Partial<ApiClient> = { subscribe, getSubscription };
+  it('opens the SHORT side when the direction selector is set to Short', async () => {
+    const getOpenPositionFlow = vi.fn(() => Promise.resolve(pendingOpenPosition()));
+    const openPosition = vi.fn<
+      (body: OpenPositionRequest) => Promise<ReturnType<typeof pendingOpenPosition>>
+    >(() => Promise.resolve(pendingOpenPosition()));
+    const client: Partial<ApiClient> = { openPosition, getOpenPositionFlow };
+    render(wrap(client, <OrderTicket pair={pair()} owner={ADDRESS} />));
+
+    await userEvent.selectOptions(
+      screen.getByRole('combobox', { name: /position side/i }),
+      'SHORT',
+    );
+    await userEvent.click(screen.getByRole('button', { name: /open position/i }));
+    await userEvent.click(screen.getByRole('button', { name: /confirm subscription/i }));
+    expect(openPosition.mock.calls[0]![0].side).toBe('SHORT');
+  });
+
+  it('shows success only once the polled flow returns confirmed (the commit point)', async () => {
+    const getOpenPositionFlow = vi.fn(() => Promise.resolve(confirmedOpenPosition()));
+    const openPosition = vi.fn<
+      (body: OpenPositionRequest) => Promise<ReturnType<typeof pendingOpenPosition>>
+    >(() => Promise.resolve(pendingOpenPosition()));
+    const client: Partial<ApiClient> = { openPosition, getOpenPositionFlow };
     render(wrap(client, <OrderTicket pair={pair()} owner={ADDRESS} />));
 
     await userEvent.click(screen.getByRole('button', { name: /open position/i }));
@@ -86,9 +104,9 @@ describe('OrderTicket — disabled-1x leverage + Review→Confirm open/close (St
     expect(await screen.findByText(/subscription confirmed/i)).toBeInTheDocument();
   });
 
-  it('falls back to the Subscriber-surface link when the market has no Rose Note', () => {
+  it('falls back to the Subscriber-surface link when there is no owner (cannot open a position)', () => {
     const onNavigate = vi.fn();
-    render(wrap({}, <OrderTicket pair={pair(null)} owner={ADDRESS} onNavigate={onNavigate} />));
+    render(wrap({}, <OrderTicket pair={pair()} onNavigate={onNavigate} />));
     expect(screen.queryByRole('button', { name: /open position/i })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: /subscriber surface/i })).toBeInTheDocument();
   });

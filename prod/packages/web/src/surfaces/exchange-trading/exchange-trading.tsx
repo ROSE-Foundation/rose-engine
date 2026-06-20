@@ -1,26 +1,45 @@
 import { useState } from 'react';
+import { Button } from '../../components/ui/button.js';
+import {
+  ConfirmActionPanel,
+  type PairSummary,
+  type WriteStatus,
+} from '../../components/ui/confirm-action-panel.js';
 import { DeltaIndicator } from '../../components/ui/delta-indicator.js';
 import { LiveIndicator } from '../../components/ui/live-indicator.js';
 import { MoneyCell } from '../../components/ui/money-cell.js';
 import { Skeleton } from '../../components/ui/skeleton.js';
 import { StatCard } from '../../components/ui/stat-card.js';
+import { StatusBadge } from '../../components/ui/status-badge.js';
 import { TBody, TD, TH, THead, TR, Table } from '../../components/ui/table.js';
 import { ApiClientError } from '../../lib/api-client.js';
 import { cn } from '../../lib/cn.js';
 import type {
   AccountBalance,
+  CoupledPairState,
   GroupViewEntity,
   GroupViewResponse,
+  Money,
   Position,
   PositionMark,
 } from '../../lib/contract-types.js';
-import { REFRESH_WINDOW_MS, useGroupView, usePositions } from '../../lib/queries.js';
+import {
+  REFRESH_WINDOW_MS,
+  useClosePosition,
+  useClosePositionFlow,
+  useGroupView,
+  usePositions,
+  useReconcilePositions,
+} from '../../lib/queries.js';
 import { ChartPlaceholder } from './chart-placeholder.js';
 import { MarketList } from './market-list.js';
 import { PayoffChart } from './payoff-chart.js';
 import { OrderTicket } from './order-ticket.js';
 import { PairStrip } from './pair-strip.js';
 import { PositionsTable } from './positions-table.js';
+
+// Paper/local demo default — the close collateral/payment asset (matches the order-ticket open default).
+const PAYMENT_ASSET = 'EUR';
 
 /** An entity row's execution figures: deployed positions + realized P&L, by entity (paper/testnet). */
 interface EntityExecution {
@@ -104,6 +123,181 @@ function Stat({
 const PANEL = 'rounded-lg border border-border bg-card';
 
 /**
+ * The position-CLOSE write flow (Stories 8.3/8.6, FR-25, UX-DR6). Reuses the pessimistic
+ * `ConfirmActionPanel`: on Confirm it fires `POST /positions/close`, captures the pending flow handle,
+ * and stays **pending** until the polled `GET /positions/close/:id` reads `confirmed` (no optimistic
+ * success). The headline Epic-8.6 behaviour: a D1 single-side close is refused with a typed 409
+ * `SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED` — surfaced as an explicit, §11.4-rule-NAMED refusal
+ * (UX-DR5), carrying the boundary's message, not a generic error. A 503 surfaces "not available …".
+ */
+function PositionCloseFlow({
+  position,
+  pairState,
+  onCancel,
+}: {
+  position: Position;
+  pairState: CoupledPairState;
+  onCancel: () => void;
+}): React.JSX.Element {
+  const closeMut = useClosePosition();
+  const [handle, setHandle] = useState('');
+  const flow = useClosePositionFlow(handle);
+  const statusData = flow.data;
+
+  // The close size is the position's collateral magnitude — surfaced for the Review step (NFR-2 string).
+  const amount: Money = {
+    asset: PAYMENT_ASSET,
+    scale: 2,
+    smallestUnits: position.collateral,
+    decimal: position.collateral,
+  };
+  const pairSummary: PairSummary = { referenceAsset: position.referenceAsset, state: pairState };
+
+  let writeStatus: WriteStatus = 'idle';
+  let errorCode: string | undefined;
+  let errorMessage: string | undefined;
+  if (closeMut.isError) {
+    writeStatus = 'failed';
+    errorCode = closeMut.error instanceof ApiClientError ? closeMut.error.code : 'REQUEST_FAILED';
+    errorMessage = closeMut.error instanceof ApiClientError ? closeMut.error.message : undefined;
+  } else if (statusData?.status === 'confirmed') {
+    writeStatus = 'confirmed';
+  } else if (statusData?.status === 'failed') {
+    writeStatus = 'failed';
+    errorCode = 'WRITE_FAILED';
+  } else if (closeMut.isPending || handle.length > 0) {
+    writeStatus = 'pending';
+  }
+
+  function onConfirm(): void {
+    // A fresh idempotency key per submit (NFR-9 exactly-once).
+    const idempotencyKey = `close:${position.id}:${Date.now()}`;
+    closeMut.mutate(
+      { positionId: position.id, paymentAsset: PAYMENT_ASSET, idempotencyKey },
+      { onSuccess: (v) => setHandle(v.id) },
+    );
+  }
+
+  return (
+    <div className="mt-3 max-w-md">
+      <p className="mb-2 text-[11px] font-semibold uppercase tracking-wider text-dim">
+        Close {position.side} {position.referenceAsset} position
+      </p>
+      <ConfirmActionPanel
+        action="redeem"
+        amount={amount}
+        paymentAsset={PAYMENT_ASSET}
+        pair={pairSummary}
+        status={writeStatus}
+        errorCode={errorCode}
+        errorMessage={errorMessage}
+        onConfirm={onConfirm}
+        onCancel={onCancel}
+      />
+    </div>
+  );
+}
+
+/** One residual-backing row of the reconciliation report (per pair + side). */
+function backingRowKey(coupledPairId: string, side: string): string {
+  return `${coupledPairId}:${side}`;
+}
+
+/**
+ * Operator panel (Story 8.5, FR-27): runs `POST /positions/reconcile` on demand and renders the
+ * per-(pair, side) residual-backing report (backing vs exposure + an over-exposed flag) plus any
+ * position↔pair mismatches/corrections. A 503 `POSITION_SERVICE_UNAVAILABLE` (non-paper deployment)
+ * degrades to a clean "not available on this deployment" state. Behavioural/minimal — reuses existing
+ * components/styles, no new visual design system.
+ */
+function ReconciliationPanel(): React.JSX.Element {
+  const reconcile = useReconcilePositions();
+  const report = reconcile.data;
+  const err = reconcile.error;
+  const unavailable = err instanceof ApiClientError && err.status === 503;
+  const code = err instanceof ApiClientError ? err.code : 'REQUEST_FAILED';
+
+  return (
+    <section className={cn(PANEL, 'p-4')}>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h2 className="font-display text-base font-semibold">
+            Operator · position↔pair reconciliation
+          </h2>
+          <p className="text-xs text-dim">
+            Per-(pair, side) residual-backing solvency report (report-only, FR-27).
+          </p>
+        </div>
+        <Button variant="outline" onClick={() => reconcile.mutate()} disabled={reconcile.isPending}>
+          {reconcile.isPending ? 'Reconciling…' : 'Run reconciliation'}
+        </Button>
+      </div>
+
+      <div aria-live="polite" className="mt-3">
+        {unavailable && (
+          <p className="rounded-md border border-border bg-muted px-3 py-2 text-sm text-muted-foreground">
+            Reconciliation is not available on this deployment ({code}).
+          </p>
+        )}
+        {err && !unavailable && (
+          <p role="alert" className="text-sm text-loss">
+            ✗ Reconciliation failed — {code}.
+          </p>
+        )}
+        {report && (
+          <div className="flex flex-col gap-3">
+            <div className="flex flex-wrap gap-2 text-xs">
+              <StatusBadge status={report.anyOverExposure ? 'divergent' : 'live'} />
+              <span className="text-dim">
+                {report.anyOverExposure
+                  ? `${report.overExposedSides.length} over-exposed side(s)`
+                  : 'All sides solvent'}
+                {report.anyMismatch ? ` · ${report.mismatches.length} mismatch(es)` : ''}
+                {report.anyCorrected ? ` · ${report.corrections} correction(s)` : ''}
+              </span>
+            </div>
+            {report.sideBacking.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No positions to reconcile.</p>
+            ) : (
+              <Table>
+                <THead>
+                  <TR>
+                    <TH>Market</TH>
+                    <TH>Side</TH>
+                    <TH>Backing</TH>
+                    <TH>Exposure</TH>
+                    <TH>Headroom</TH>
+                    <TH>Solvency</TH>
+                  </TR>
+                </THead>
+                <TBody>
+                  {report.sideBacking.map((row) => (
+                    <TR key={backingRowKey(row.coupledPairId, row.side)}>
+                      <TD>{row.referenceAsset}</TD>
+                      <TD>
+                        <span className={row.side === 'LONG' ? 'text-long' : 'text-short'}>
+                          {row.side}
+                        </span>
+                      </TD>
+                      <TD className="font-numeric tabular-nums">{row.backing}</TD>
+                      <TD className="font-numeric tabular-nums">{row.exposure}</TD>
+                      <TD className="font-numeric tabular-nums">{row.headroom}</TD>
+                      <TD>
+                        <StatusBadge status={row.overExposed ? 'divergent' : 'live'} />
+                      </TD>
+                    </TR>
+                  ))}
+                </TBody>
+              </Table>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/**
  * Exchange/Trading terminal (AC-1, FR-14, FR-20). A 3-column trading-terminal layout — market list |
  * chart + pair strip | order ticket — honestly adapted to ROSE's atomic coupled-PACKAGE model (no
  * naked single-leg trading; the order ticket points to the real subscribe/redeem flow). Markets come
@@ -130,6 +324,8 @@ export function ExchangeTradingView({
   const markets = view.coupledCoinBook;
   const pairs = view.coupledPairs;
   const [selected, setSelected] = useState<string | null>(markets[0]?.referenceAsset ?? null);
+  // The position the operator is closing (a per-row action on the positions table); null ⇒ none.
+  const [closing, setClosing] = useState<Position | null>(null);
 
   if (execution.length === 0 && pairs.length === 0 && markets.length === 0) {
     return <p className="text-muted-foreground">No trading activity yet.</p>;
@@ -197,8 +393,17 @@ export function ExchangeTradingView({
         <h2 className="mb-2 font-display text-base font-semibold">
           Open positions{market ? ` · ${market.referenceAsset}` : ''}
         </h2>
-        <PositionsTable positions={scopedPositions} />
+        <PositionsTable positions={scopedPositions} onClose={setClosing} />
+        {closing && (
+          <PositionCloseFlow
+            position={closing}
+            pairState={pairs.find((p) => p.id === closing.coupledPairId)?.state ?? 'ACTIVE'}
+            onCancel={() => setClosing(null)}
+          />
+        )}
       </section>
+
+      <ReconciliationPanel />
 
       {execution.length > 0 && (
         <>

@@ -1,6 +1,11 @@
 import type {
+  ClosePositionRequest,
+  ClosePositionView,
   CoupledPairResponse,
   GroupViewResponse,
+  OpenPositionRequest,
+  OpenPositionView,
+  PositionReconciliationReport,
   PositionsResponse,
   RedeemRequest,
   RedemptionResponse,
@@ -42,6 +47,22 @@ export interface ApiClient {
   getRedemption(id: string): Promise<RedemptionResponse>;
   /** List a user's positions with live marks + P&L (Story 8.4, FR-26). */
   getPositions(owner: string, opts?: { referenceAsset?: string }): Promise<PositionsResponse>;
+  /**
+   * Open a directional position (paired mint over subscribe/mint, Story 8.3). The flow returns
+   * `pending` on the POST and a follow-up `getOpenPositionFlow` flips it to `confirmed` (UX-DR6).
+   */
+  openPosition(body: OpenPositionRequest): Promise<OpenPositionView>;
+  /**
+   * Close a position (paired burn, Stories 8.3/8.6). A D1 single-side close is refused with a typed
+   * 409 `SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED` (§11.4) the surface NAMES (UX-DR5).
+   */
+  closePosition(body: ClosePositionRequest): Promise<ClosePositionView>;
+  /** Read a position-open flow status — `pending` until the on-chain commit point, then `confirmed`. */
+  getOpenPositionFlow(id: string): Promise<OpenPositionView>;
+  /** Read a position-close flow status — `pending` until the on-chain commit point, then `confirmed`. */
+  getClosePositionFlow(id: string): Promise<ClosePositionView>;
+  /** Operator position↔pair reconciliation report (Story 8.5, FR-27; report-only). */
+  reconcilePositions(): Promise<PositionReconciliationReport>;
 }
 
 /** The structured error envelope the boundary returns (`{ error: { code, message } }`). */
@@ -112,6 +133,13 @@ export function createApiClient({
       if (opts?.referenceAsset) params.set('referenceAsset', opts.referenceAsset);
       return get<PositionsResponse>(`/positions?${params.toString()}`);
     },
+    openPosition: (body: OpenPositionRequest) => post<OpenPositionView>('/positions/open', body),
+    closePosition: (body: ClosePositionRequest) =>
+      post<ClosePositionView>('/positions/close', body),
+    getOpenPositionFlow: (id: string) => get<OpenPositionView>(`/positions/open/${enc(id)}`),
+    getClosePositionFlow: (id: string) => get<ClosePositionView>(`/positions/close/${enc(id)}`),
+    // The reconcile route takes NO body; POST an empty object (the boundary ignores it).
+    reconcilePositions: () => post<PositionReconciliationReport>('/positions/reconcile', {}),
   };
 }
 

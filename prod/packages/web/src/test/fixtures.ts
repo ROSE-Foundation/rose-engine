@@ -1,13 +1,19 @@
 // Typed fixtures shaped to the `@rose/api` contract (the surfaces consume the SAME wire types in
 // test as at runtime — only the transport differs: a fixture-backed client here, the paper/local
 // API at runtime). NO network, NO secret.
+import { ApiClientError } from '../lib/api-client.js';
 import type {
+  ClosePositionView,
   CoupledPairResponse,
+  FlowPosition,
   GroupViewEntity,
   GroupViewResponse,
   Money,
+  OpenPositionView,
   Position,
   PositionMark,
+  PositionReconciliationReport,
+  PositionSide,
   PositionsResponse,
   RedemptionResponse,
   RoseNoteResponse,
@@ -437,4 +443,137 @@ export function stalePosition(): Position {
 /** A `GET /positions` listing for the demo owner. */
 export function positionsResponse(positions: Position[] = [okPosition()]): PositionsResponse {
   return { owner: `0x${'a'.repeat(40)}`, positions };
+}
+
+// ─── Position open/close flows + reconcile + the §11.4 guardrail (Stories 8.3/8.5/8.6) ──────────
+
+const OWNER = `0x${'a'.repeat(40)}`;
+
+/** The persisted position embedded in a confirmed open/close flow view (no live mark). */
+function flowPosition(side: PositionSide, lifecycle: 'OPEN' | 'CLOSED' = 'OPEN'): FlowPosition {
+  return {
+    id: 'pos-1',
+    coupledPairId: 'pair-1',
+    owner: OWNER,
+    referenceAsset: 'BTC',
+    side,
+    sizeUnits: '10000',
+    entryPrice: '60000.00',
+    collateral: '10000',
+    leverage: '1',
+    realizedPnl: '0',
+    lifecycle,
+    createdAt: '2026-06-16T10:00:00.000Z',
+    updatedAt: '2026-06-16T12:00:00.000Z',
+  };
+}
+
+/** A pending position-open flow (paired mint submitted; no journal entry / position row yet — UX-DR6). */
+export function pendingOpenPosition(): OpenPositionView {
+  return {
+    id: 'idem-open-1',
+    coupledPairId: 'pair-1',
+    owner: OWNER,
+    side: 'LONG',
+    amount: '100000',
+    paymentAsset: 'EUR',
+    status: 'pending',
+    txHash: '0xpendingmint',
+    journalEntryId: null,
+    position: null,
+  };
+}
+
+/** A confirmed position-open flow (the on-chain commit point posted the entry + created the position). */
+export function confirmedOpenPosition(): OpenPositionView {
+  return {
+    ...pendingOpenPosition(),
+    status: 'confirmed',
+    journalEntryId: 'entry-open-1',
+    position: flowPosition('LONG'),
+  };
+}
+
+/** A pending position-close flow (paired burn submitted; position still OPEN). */
+export function pendingClosePosition(): ClosePositionView {
+  return {
+    id: 'idem-close-1',
+    positionId: 'pos-1',
+    coupledPairId: 'pair-1',
+    owner: OWNER,
+    amount: '100000',
+    paymentAsset: 'EUR',
+    status: 'pending',
+    txHash: '0xpendingburn',
+    journalEntryId: null,
+    position: null,
+  };
+}
+
+/** A confirmed position-close flow (the position closed at the on-chain commit point). */
+export function confirmedClosePosition(): ClosePositionView {
+  return {
+    ...pendingClosePosition(),
+    status: 'confirmed',
+    journalEntryId: 'entry-close-1',
+    position: flowPosition('LONG', 'CLOSED'),
+  };
+}
+
+/** The machine code + message of the §11.4 D1 single-side close guardrail (the headline Epic-8.6 refusal). */
+export const SOLVENCY_GUARDRAIL_CODE = 'SOLVENCY_GUARDRAIL_SINGLE_SIDE_CLOSE_REFUSED';
+export const SOLVENCY_GUARDRAIL_MESSAGE =
+  '§11.4 solvency guardrail: the opposite leg of this pair is held by another user; a single-side ' +
+  'close would leave the coupled pair under-collateralised and is refused before any burn is submitted.';
+
+/** The 409 guardrail refusal as the typed `ApiClientError` the client throws (UX-DR5, rule-named). */
+export function solvencyGuardrailError(): ApiClientError {
+  return new ApiClientError(SOLVENCY_GUARDRAIL_CODE, SOLVENCY_GUARDRAIL_MESSAGE, 409);
+}
+
+/** A 503 refuse-if-absent error (the position service is not composed on a non-paper deployment). */
+export function positionServiceUnavailableError(): ApiClientError {
+  return new ApiClientError(
+    'POSITION_SERVICE_UNAVAILABLE',
+    'The position open/close service is not configured on this deployment.',
+    503,
+  );
+}
+
+/** A position↔pair reconciliation report carrying an over-exposed SHORT side + clean LONG side. */
+export function reconciliationReport(): PositionReconciliationReport {
+  return {
+    reconciledAt: '2026-06-16T12:00:00.000Z',
+    source: 'positions+pairs+chain',
+    sideBacking: [
+      {
+        coupledPairId: 'pair-1',
+        referenceAsset: 'BTC',
+        side: 'LONG',
+        backing: '10000',
+        exposure: '10000',
+        headroom: '0',
+        overExposed: false,
+        overExposedBy: '0',
+        openPositionCount: 1,
+      },
+      {
+        coupledPairId: 'pair-1',
+        referenceAsset: 'BTC',
+        side: 'SHORT',
+        backing: '10000',
+        exposure: '12000',
+        headroom: '-2000',
+        overExposed: true,
+        overExposedBy: '2000',
+        openPositionCount: 1,
+      },
+    ],
+    overExposedSides: [{ coupledPairId: 'pair-1', side: 'SHORT', overExposedBy: '2000' }],
+    anyOverExposure: true,
+    mismatches: [],
+    anyMismatch: false,
+    anyCorrected: false,
+    corrections: 0,
+  };
 }

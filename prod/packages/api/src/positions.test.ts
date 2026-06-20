@@ -14,6 +14,7 @@ import {
 import { closePosition, createPosition } from '@rose/positions';
 import type { PriceOracle, PriceQuote } from '@rose/price-oracle';
 import type { FastifyInstance } from 'fastify';
+import { getAddress } from 'viem';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import { buildApp, type ApiDeps, type MarkTrustInputs } from './app.js';
 
@@ -115,6 +116,22 @@ describe('GET /positions — money is strings, validated by Zod (AC #1)', () => 
     const mine = await app.inject({ method: 'GET', url: '/positions?owner=owner-1' });
     expect(mine.json().positions).toHaveLength(2);
     expect(mine.json().positions.every((p: { owner: string }) => p.owner === 'owner-1')).toBe(true);
+    await app.close();
+  });
+
+  it('canonicalizes the owner to EIP-55 — a lowercase query matches a checksummed stored owner', async () => {
+    // The open path persists the checksummed owner; the SPA queries with its lowercase baked-in
+    // VITE_SUBSCRIBER_ADDRESS. Without canonicalization the listing would be silently empty.
+    const lower = '0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa';
+    const checksummed = getAddress(lower);
+    expect(checksummed).not.toBe(lower); // mixed-case (EIP-55) — an exact match would miss it
+    const eur = await seedPair();
+    await seedPosition(eur, 'LONG', checksummed);
+    const app = await appWith({ priceOracle: fixedOracle(null), markTrust: TRUST });
+    const res = await app.inject({ method: 'GET', url: `/positions?owner=${lower}` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().positions).toHaveLength(1);
+    expect(res.json().owner).toBe(checksummed);
     await app.close();
   });
 
