@@ -34,6 +34,7 @@ import {
   findByTxHash,
   type OutboxEventRow,
   type RoseDb,
+  type RoseExecutor,
 } from '@rose/ledger';
 import {
   MintPairDualWrite,
@@ -245,6 +246,50 @@ export class SolvencyGuardrailError extends Error {
   }
 }
 
+/**
+ * The outcome of a counterparty-adapter-resolved INDEPENDENT single-side close (the D1 topology). The
+ * closing holder's side is RE-ASSIGNED to a matched-book/house identity — it is NOT burned (the
+ * on-chain package burns only when BOTH sides are released) — and the move is JOURNALED (auditable).
+ */
+export interface CounterpartyCloseResult {
+  /** Always `'reassigned'` — the closer's side moved to the counterparty/house, it was not burned. */
+  readonly resolution: 'reassigned';
+  /** The closer's position, now flipped OPEN → CLOSED. */
+  readonly closerPositionId: string;
+  /** The counterparty/house identity that TOOK OVER the closer's side (carrying the same claim). */
+  readonly assignee: string;
+  /** The OPEN position now held by the assignee carrying the conserved per-side collateral claim. */
+  readonly assigneePositionId: string;
+  /** The balanced, auditable journal entry recording the claim transfer (NFR-3). */
+  readonly journalEntryId: string;
+}
+
+/** Input handed to a {@link CounterpartyAdapter} to resolve a D1 independent single-side close. */
+export interface CounterpartySingleSideCloseInput {
+  /** The transaction executor — the adapter's writes commit atomically with the closer's flip. */
+  readonly executor: RoseExecutor;
+  /** The closer's OPEN position being released independently of its opposite (counterparty) leg. */
+  readonly position: PositionView;
+  /** The live counterparty leg (the OPPOSITE side, held by another user) that tripped the guardrail. */
+  readonly opposingHolder: { readonly id: string; readonly owner: string };
+}
+
+/**
+ * A substitutable counterparty/inventory adapter (NFR-8) satisfying the §11.4 guardrail contract: it
+ * RESOLVES an independent single-side close (the D1 topology) by RE-ASSIGNING the closing holder's
+ * side to a matched-book/house identity instead of FAILING CLOSED. It MUST (1) flip the closer
+ * OPEN → CLOSED, (2) leave the opposite holder's leg UNTOUCHED, (3) NOT burn the on-chain package, and
+ * (4) CONSERVE the per-(pair, side) collateral exposure — the assignee takes over the side carrying the
+ * SAME claim — so the Story-8.5 residual-backing invariant still holds, all JOURNALED in ONE
+ * transaction. When NO adapter is injected the close stays FAIL-CLOSED under the guardrail (Story 8.6,
+ * unchanged). The REAL board-gated §8 Q8 model is deferred; faithful mode composes a clearly-labelled
+ * MOCK that NEVER touches a real-capital path.
+ * [Source: epics.md §Story 9.4; architecture.md line 187 "Production-faithful mock"; addendum §J FR-31.]
+ */
+export interface CounterpartyAdapter {
+  resolveSingleSideClose(input: CounterpartySingleSideCloseInput): Promise<CounterpartyCloseResult>;
+}
+
 /** Injected dependencies for the position service. The service opens no connection and holds no key. */
 export interface PositionServiceDeps {
   readonly db: RoseDb;
@@ -266,6 +311,14 @@ export interface PositionServiceDeps {
   readonly closeTopology: RedemptionAccountTopology;
   /** The payment/collateral asset the cash/`NOTE_LIABILITY` accounts are denominated in (paper P0). */
   readonly paymentAsset: string;
+  /**
+   * OPTIONAL counterparty/inventory adapter (NFR-8, Story 9.4 / FR-31). When PRESENT, a D1 independent
+   * single-side close RESOLVES via re-assignment (the §11.4 guardrail's matched-book/house path)
+   * instead of throwing. When ABSENT (paper mode), the close stays FAIL-CLOSED (`SolvencyGuardrailError`
+   * — Story 8.6, unchanged). Backward-compatible: omitting it changes NOTHING. The real §8 Q8 model is
+   * board-gated; faithful mode composes a clearly-labelled mock that never touches a real-capital path.
+   */
+  readonly counterparty?: CounterpartyAdapter;
 }
 
 /** Map an outbox status to the position-flow status (terminal failures never read pending). */
@@ -602,6 +655,52 @@ export function makePositionService(deps: PositionServiceDeps): PositionService 
         position.owner,
       );
       if (opposing !== null) {
+        // Story 9.4 (FR-31): if a counterparty/inventory adapter is injected (faithful mode's mock
+        // house), the guardrail's RESOLUTION port re-assigns the closer's side to the house instead of
+        // refusing — the opposite leg is UNTOUCHED, NO burn is submitted (the package burns only when
+        // BOTH sides release), the per-side backing is CONSERVED (the house takes over the side), and
+        // the move is JOURNALED in ONE transaction. When NO adapter is present (paper mode), this stays
+        // FAIL-CLOSED exactly as Story 8.6 — the real §8 Q8 model is board-gated.
+        if (deps.counterparty !== undefined) {
+          const adapter = deps.counterparty;
+          const resolved = await deps.db.transaction((tx) =>
+            adapter.resolveSingleSideClose({
+              executor: tx,
+              position,
+              opposingHolder: { id: opposing.id, owner: opposing.owner },
+            }),
+          );
+          console.info(
+            '[position] D1 single-side close RESOLVED via counterparty adapter (re-assignment; NO burn)',
+            {
+              positionId: input.positionId,
+              coupledPairId: position.coupledPairId,
+              side: position.side,
+              closer: position.owner,
+              counterpartyOwner: opposing.owner,
+              assignee: resolved.assignee,
+              assigneePositionId: resolved.assigneePositionId,
+              journalEntryId: resolved.journalEntryId,
+            },
+          );
+          // The re-assignment IS the commit point — there is NO pending on-chain burn for a single-side
+          // release, so the view reads `confirmed` with a null txHash + the claim-transfer entry, and
+          // the closer position is now CLOSED. (No optimistic state — the writes already committed.)
+          const closed = await getPosition(deps.db, input.positionId);
+          return {
+            id: input.idempotencyKey,
+            positionId: input.positionId,
+            coupledPairId: position.coupledPairId,
+            owner: position.owner,
+            amount: position.sizeUnits,
+            paymentAsset: deps.paymentAsset,
+            status: 'confirmed',
+            txHash: null,
+            journalEntryId: resolved.journalEntryId,
+            position: closed,
+          };
+        }
+
         console.warn(
           '[position] close refused — §11.4 solvency guardrail (D1 independent single-side close); NO burn submitted',
           {

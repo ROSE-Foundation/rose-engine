@@ -8,9 +8,9 @@
 // synthesizes (from the returned view, or — for strategy resets — from the SUBMITTED outbox intent) and
 // hands it to the transport to schedule (or compensate), then returns its PENDING view unchanged.
 //
-// SCOPE (Story 9.1 only): authorization/eligibility/identity behave as in paper (a clearly-labelled
-// faithful ALLOW + the FR-19 allowlist + the seeded identity) — the real default-deny + KYC (9.2),
-// session identity (9.3), and counterparty mock (9.4) are out of scope and land later. Composed in
+// SCOPE: Story 9.1 (async confirmation) + 9.2 (default-deny + KYC) + 9.4 (the mock counterparty/
+// inventory adapter resolving the D1 single-side close via house re-assignment). Session identity (9.3)
+// and the operator panel/banner (9.5/9.6) land later. Composed in
 // `@rose/api` (not `@rose/rose-note`) for the same reason the paper position service is: `@rose/positions`
 // already depends on `@rose/rose-note` + `@rose/chain`, so composing positions in `@rose/rose-note` would
 // be an import cycle. SECURITY: in-process only — NO Sepolia, NO RPC, NO secret, NO real price feed.
@@ -50,6 +50,7 @@ import {
   makeKycEligibilityProvider,
   runWithKycContext,
 } from './faithful-authorization.js';
+import { makeMockCounterpartyAdapter } from './counterparty-mock.js';
 import type { MockKycRegistry } from './kyc-registry.js';
 
 /**
@@ -59,7 +60,8 @@ import type { MockKycRegistry } from './kyc-registry.js';
  */
 export const FAITHFUL_MODE_BANNER =
   'FAITHFUL MODE — production-faithful demo (testnet/paper, NO real capital). REAL: ledger + ' +
-  'outbox/saga commit-point & compensation. MOCKED: on-chain confirmation latency + injectable failure.';
+  'outbox/saga commit-point & compensation + §11.4 solvency guardrail. MOCKED: on-chain confirmation ' +
+  'latency + injectable failure + counterparty/inventory (house) single-side-close re-assignment.';
 
 /**
  * Builds the faithful subscribe/redeem/strategy write services. Mirrors `makePaperModeServices` but
@@ -259,11 +261,13 @@ export interface MakeFaithfulPositionServiceInput {
 }
 
 /**
- * Builds the faithful position service. Mirrors `makePaperPositionService` but schedules the open/close
- * commit point through the `FaithfulConfirmationTransport` (delayed + failure-injectable) instead of
- * confirming instantly. A `SolvencyGuardrailError` from `closePosition` (the D1 single-side topology) is
- * thrown BEFORE any burn submit, so it propagates untouched (the route maps it to a 409) and never
- * reaches the transport.
+ * Builds the faithful position service. Mirrors `makePaperPositionService` but (1) schedules the
+ * open/close commit point through the `FaithfulConfirmationTransport` (delayed + failure-injectable)
+ * instead of confirming instantly, and (2) composes the clearly-labelled MOCK counterparty/inventory
+ * adapter (Story 9.4, FR-31) so a D1 INDEPENDENT single-side close RESOLVES via house re-assignment
+ * instead of the Story-8.6 fail-closed refusal. The re-assignment commits synchronously (it submits NO
+ * burn), so its `confirmed` view never reaches the transport. Paper mode injects NO adapter and stays
+ * fail-closed (a `SolvencyGuardrailError` propagates to a 409).
  */
 export function makeFaithfulPositionService(
   input: MakeFaithfulPositionServiceInput,
@@ -275,6 +279,15 @@ export function makeFaithfulPositionService(
   const saga = new OutboxSaga({ db });
   const mint = new MintPairDualWrite({ saga, clients, account });
   const burn = new BurnPairDualWrite({ saga, clients, account });
+
+  // The MOCK house-inventory counterparty (Story 9.4): the claim-transfer entry posts against the
+  // seeded EUR (scale 2) NOTE_LIABILITY → cash demo accounts (one (asset, scale) ⇒ it balances).
+  const counterparty = makeMockCounterpartyAdapter({
+    claimTransfer: {
+      debitAccountId: paperConfig.redemptionTopology.noteLiabilityAccountId,
+      creditAccountId: paperConfig.redemptionTopology.cashAccountId,
+    },
+  });
 
   const inner = makePositionService({
     db,
@@ -288,6 +301,8 @@ export function makeFaithfulPositionService(
     openTopology: paperConfig.subscriptionTopology,
     closeTopology: paperConfig.redemptionTopology,
     paymentAsset: paperConfig.paymentAsset,
+    // Story 9.4 / FR-31: the §11.4 guardrail's resolution port — present ONLY in faithful mode.
+    counterparty,
   });
 
   // A monotonic synthetic block height for the simulated events (audit only; the saga keys on tx hash).
@@ -328,10 +343,11 @@ export function makeFaithfulPositionService(
     getOpenPosition: (id) => inner.getOpenPosition(id),
 
     async closePosition(close: ClosePositionInput): Promise<ClosePositionView> {
-      // `closePosition` throws `SolvencyGuardrailError` (D1 single-side topology) BEFORE any burn is
-      // submitted — let it propagate (the route maps it to a 409). Otherwise it returns PENDING with a
-      // `txHash`; schedule the matching PairBurned commit point through the transport. Capital-OUT (an
-      // exit): authorized regardless of onboarding (governed by §11.4/lifecycle, not KYC).
+      // A D1 single-side close now RESOLVES through the mock counterparty (re-assignment) and returns a
+      // `confirmed` view with a NULL txHash (no burn) — the `pending && txHash` guard below skips it, so
+      // nothing is scheduled. A whole-package close still returns PENDING with a `txHash`; schedule its
+      // matching PairBurned commit point through the transport. Capital-OUT (an exit): authorized
+      // regardless of onboarding (governed by §11.4/lifecycle, not KYC).
       const view = await runWithKycContext({ capitalIn: false }, () => inner.closePosition(close));
       if (view.status === 'pending' && view.txHash !== null) {
         const txHash = view.txHash;

@@ -19,6 +19,7 @@ import {
   createPool,
   hardReset,
   migrateUp,
+  recordJournalEntry,
   type RoseDb,
 } from '@rose/ledger';
 import {
@@ -41,9 +42,11 @@ import {
   createPosition,
   closePosition as closePositionRow,
   makePositionService,
+  reconcilePositionsToPairs,
   PositionIdempotencyConflictError,
   PositionLifecycleError,
   SolvencyGuardrailError,
+  type CounterpartyAdapter,
   type PositionService,
 } from './index.js';
 
@@ -122,6 +125,7 @@ function makeService(over?: {
   allowlist?: readonly Address[];
   mintCapture?: { broadcasts: number };
   burnCapture?: { broadcasts: number };
+  counterparty?: CounterpartyAdapter;
 }): PositionService {
   const saga = new OutboxSaga({ db });
   const mintClients = createRoseChainClients(chainConfig(), {
@@ -151,6 +155,7 @@ function makeService(over?: {
     openTopology,
     closeTopology,
     paymentAsset: PAYMENT_ASSET,
+    counterparty: over?.counterparty,
   });
 }
 
@@ -670,6 +675,148 @@ describe('AC-2 — the guardrail does NOT block the whole-package / same-user cl
       idempotencyKey: 'close-closed-opp',
     });
     expect(view.status).toBe('pending');
+    expect(burnCapture.broadcasts).toBe(1);
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Story 9.4 — when a counterparty/inventory adapter IS injected, the D1 independent
+// single-side close RESOLVES via re-assignment (the §11.4 guardrail's resolution
+// path) instead of failing closed: closer CLOSED, opposite leg untouched, NO burn,
+// journaled, and the per-side residual-backing solvency (Story 8.5) still holds.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TEST_HOUSE_OWNER = 'TEST-HOUSE-INVENTORY';
+
+/**
+ * A faithful inline counterparty adapter mirroring the `@rose/api` mock: it flips the closer CLOSED,
+ * has the house TAKE OVER the same side carrying the same collateral (conserving per-side exposure),
+ * and journals the claim transfer (balanced, EUR scale 2). It NEVER submits a burn. Counts invocations.
+ */
+function makeTestCounterparty(): CounterpartyAdapter & { calls: number } {
+  const adapter: CounterpartyAdapter & { calls: number } = {
+    calls: 0,
+    async resolveSingleSideClose({ executor, position }) {
+      adapter.calls += 1;
+      await closePositionRow(executor, position.id);
+      const housePosition = await createPosition(executor, {
+        coupledPairId: position.coupledPairId,
+        owner: TEST_HOUSE_OWNER,
+        referenceAsset: position.referenceAsset,
+        side: position.side,
+        sizeUnits: position.sizeUnits,
+        entryPrice: position.entryPrice,
+        collateral: position.collateral,
+        leverage: '1',
+      });
+      const entry = await recordJournalEntry(executor, {
+        description: `test mock counterparty — re-assign ${position.side} ${position.id} to house`,
+        coupledPairId: position.coupledPairId,
+        postings: [
+          {
+            accountId: closeTopology.noteLiabilityAccountId,
+            direction: 'DEBIT',
+            amount: position.collateral,
+          },
+          {
+            accountId: closeTopology.cashAccountId,
+            direction: 'CREDIT',
+            amount: position.collateral,
+          },
+        ],
+      });
+      return {
+        resolution: 'reassigned',
+        closerPositionId: position.id,
+        assignee: TEST_HOUSE_OWNER,
+        assigneePositionId: housePosition.id,
+        journalEntryId: entry.entry.id,
+      };
+    },
+  };
+  return adapter;
+}
+
+describe('Story 9.4 — counterparty adapter present: D1 single-side close completes via re-assignment', () => {
+  it('completes: closer CLOSED, opposite leg untouched, NO burn, journaled, per-side solvency preserved', async () => {
+    const burnCapture = { broadcasts: 0 };
+    const counterparty = makeTestCounterparty();
+    const service = makeService({ allowlist: [ALICE, BOB], burnCapture, counterparty });
+    // D1 topology: Alice LONG, Bob SHORT on the SAME pair.
+    const aliceLong = await seedPosition(ALICE, 'LONG');
+    const bobShort = await seedPosition(BOB, 'SHORT');
+
+    // Solvency BEFORE: no over-exposure; record the LONG-side exposure (the conserved quantity).
+    const before = await reconcilePositionsToPairs(db);
+    expect(before.anyOverExposure).toBe(false);
+    const longBefore = before.sideBacking.find((r) => r.side === 'LONG');
+    expect(longBefore?.exposure).toBe(AMOUNT.toString());
+
+    const view = await service.closePosition({
+      positionId: aliceLong,
+      paymentAsset: PAYMENT_ASSET,
+      idempotencyKey: 'close-d1-reassign',
+    });
+
+    // The close COMPLETES via the adapter (not a SolvencyGuardrailError): confirmed, NO txHash (no burn).
+    expect(counterparty.calls).toBe(1);
+    expect(view.status).toBe('confirmed');
+    expect(view.txHash).toBeNull();
+    expect(view.journalEntryId).not.toBeNull();
+    expect(view.position?.lifecycle).toBe('CLOSED');
+
+    // The closer's position is CLOSED; the opposite holder's leg is UNTOUCHED (still OPEN).
+    const aliceRow = await pool.query<{ lifecycle: string }>(
+      'SELECT lifecycle FROM positions WHERE id = $1',
+      [aliceLong],
+    );
+    expect(aliceRow.rows[0]!.lifecycle).toBe('CLOSED');
+    const bobRow = await pool.query<{ lifecycle: string }>(
+      'SELECT lifecycle FROM positions WHERE id = $1',
+      [bobShort],
+    );
+    expect(bobRow.rows[0]!.lifecycle).toBe('OPEN');
+
+    // NO on-chain burn: no broadcast, no burn outbox row. The package is NOT burned for a single side.
+    expect(burnCapture.broadcasts).toBe(0);
+    expect(await count('outbox_events')).toBe(0);
+    // The re-assignment IS journaled (one balanced entry — auditable, NFR-3).
+    expect(await count('journal_entries')).toBe(1);
+
+    // The HOUSE took over the LONG side carrying the SAME collateral (conserves per-side exposure).
+    const house = await pool.query<{ side: string; collateral: string; lifecycle: string }>(
+      'SELECT side, collateral, lifecycle FROM positions WHERE owner = $1',
+      [TEST_HOUSE_OWNER],
+    );
+    expect(house.rows).toHaveLength(1);
+    expect(house.rows[0]!.side).toBe('LONG');
+    expect(house.rows[0]!.lifecycle).toBe('OPEN');
+    expect(house.rows[0]!.collateral).toBe(AMOUNT.toString());
+
+    // Solvency AFTER: still no over-exposure, and the LONG-side exposure is CONSERVED (Story 8.5 holds).
+    const after = await reconcilePositionsToPairs(db);
+    expect(after.anyOverExposure).toBe(false);
+    const longAfter = after.sideBacking.find((r) => r.side === 'LONG');
+    expect(longAfter?.exposure).toBe(longBefore?.exposure);
+  });
+
+  it('does NOT consult the adapter for a whole-package close with no opposite holder (burn still submitted)', async () => {
+    const burnCapture = { broadcasts: 0 };
+    const counterparty = makeTestCounterparty();
+    const service = makeService({ burnCapture, counterparty });
+    await service.openPosition(openInput());
+    const confirmed = await service.confirmOpen(mintedEvent(), { side: 'LONG' });
+    const positionId = confirmed!.position!.id;
+
+    const view = await service.closePosition({
+      positionId,
+      paymentAsset: PAYMENT_ASSET,
+      idempotencyKey: 'close-ok-adapter',
+    });
+    // No opposing holder ⇒ the guardrail never trips ⇒ the adapter is never consulted; a burn IS submitted.
+    expect(counterparty.calls).toBe(0);
+    expect(view.status).toBe('pending');
+    expect(view.txHash).toBe(BURN_HASH);
     expect(burnCapture.broadcasts).toBe(1);
   });
 });

@@ -66,6 +66,11 @@ export {
   type KycAuthorizationContext,
 } from './faithful/faithful-authorization.js';
 export {
+  makeMockCounterpartyAdapter,
+  MOCK_HOUSE_OWNER,
+  type MockCounterpartyConfig,
+} from './faithful/counterparty-mock.js';
+export {
   OnboardingAddressParamSchema,
   OnboardingRequestSchema,
   OnboardingStateSchema,
