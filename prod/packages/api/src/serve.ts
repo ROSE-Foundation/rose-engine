@@ -28,35 +28,12 @@ import {
   type CovenantThresholds,
 } from '@rose/config';
 import { createDb, createPool, migrateUp, type RoseDb } from '@rose/ledger';
-import type { PriceOracle, PriceQuote } from '@rose/price-oracle';
 import { makePaperModeServices, PAPER_MODE_BANNER } from '@rose/rose-note';
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import { buildApp, type ApiDeps, type MarkTrustInputs } from './app.js';
 import { makePaperPositionService } from './paper-position-service.js';
+import { makePaperReplayOracle } from './paper-replay-oracle.js';
 import { seedPaperDemo } from './seed-demo.js';
-
-/**
- * Paper-mode read-only `PriceOracle` (Story 8.4): for any reference asset it HONESTLY replays the
- * issued pair's own anchor P₀ as the live quote — a flat, delta-neutral paper mark (it fabricates NO
- * market move). An unknown asset ⇒ `null` (the explicit no-feed state). Read-only — writes no postings.
- */
-function makePaperAnchorReplayOracle(db: RoseDb): PriceOracle {
-  return {
-    source: 'paper-anchor-replay',
-    async getPrice(referenceAsset: string): Promise<PriceQuote | null> {
-      const pair = await db.query.coupledPairs.findFirst({
-        where: (p, { eq }) => eq(p.referenceAsset, referenceAsset),
-      });
-      if (pair === undefined) return null;
-      return {
-        referenceAsset,
-        price: pair.anchorPrice,
-        asOf: new Date(),
-        source: 'paper-anchor-replay',
-      };
-    },
-  };
-}
 
 /** Explicit paper-mode oracle trust inputs (§15) — a generous freshness bound + a 50% divergence band. */
 const PAPER_MARK_TRUST: MarkTrustInputs = {
@@ -281,8 +258,10 @@ async function main(): Promise<void> {
       redemptions: paper.redemptions,
       strategy: paper.strategy,
       positionService,
-      // The position P&L endpoint shows LIVE marks in paper mode (anchor-replay oracle, §15 trust).
-      priceOracle: makePaperAnchorReplayOracle(db),
+      // The position P&L endpoint shows LIVE, MOVING marks in paper mode: a deterministic replay feed
+      // (Story-8.1 CsvReplayPriceOracle) oscillates each pair's price around its anchor within the §15
+      // trust band, so directional P&L visibly moves (L gains / S mirrors) instead of sitting flat.
+      priceOracle: makePaperReplayOracle(db),
       markTrust: PAPER_MARK_TRUST,
     };
     console.log(
