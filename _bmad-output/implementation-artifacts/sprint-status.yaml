@@ -117,7 +117,7 @@ development_status:
   epic-8-retrospective: optional
 
   # Epic 9: Production-Faithful Demo Mode (mocked externals) — Sprint Change Proposal 2026-06-20
-  epic-9: in-progress
+  epic-9: done
   9-1-async-onchain-confirmation-mock-watcher: done
   9-2-default-deny-authorization-mocked-kyc-onboarding: done
   9-3-session-identity-multi-user: done
