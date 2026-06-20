@@ -25,6 +25,14 @@ import { makePaperPositionService } from './paper-position-service.js';
 
 /** A stable reference asset used as the idempotency key for the demo coupled pair. */
 const DEMO_REFERENCE_ASSET = 'DEMO/EUR-USD';
+/**
+ * A SECOND demo coupled pair on which `PAPER_ELIGIBLE_SUBSCRIBER` holds a LONG position with NO
+ * opposing-side holder. Because no other user holds the SHORT leg, a close of this position is NOT a
+ * D1 single-side close — it passes the §11.4 guardrail and completes the whole-package redeem/burn
+ * (OPEN → CLOSED). This is the companion to the D1 pair above: together they let the deployed app
+ * demonstrate BOTH a guardrail-refused close AND a successful close (Story 8.3 / 8.6).
+ */
+const DEMO_REFERENCE_ASSET_SOLO = 'DEMO/GBP-USD';
 
 // ─── Paper-mode demo constants (infrastructure; non-secret) ──────────────────────────────────────
 
@@ -262,6 +270,63 @@ async function seedPaperDemoPositions(
 }
 
 /**
+ * Ensures the SECOND demo coupled pair exists — ACTIVE, delta-neutral (equal legs), distinct reference
+ * asset. It carries no opposing-side holder, so a close of the LONG position seeded on it succeeds
+ * (the companion to the D1 pair). Returns the pair id. Idempotent: keyed on its reference asset.
+ */
+async function seedSoloPair(db: RoseDb): Promise<string> {
+  const existing = await db.query.coupledPairs.findFirst({
+    where: (pair, { eq }) => eq(pair.referenceAsset, DEMO_REFERENCE_ASSET_SOLO),
+  });
+  if (existing) return existing.id;
+  const pair = await createCoupledPair(db, {
+    referenceAsset: DEMO_REFERENCE_ASSET_SOLO,
+    anchorPrice: '1.25000000',
+    leverage: '3',
+    collateralPool: 1_000_000_000n,
+    floor: '0.50',
+    longLegValue: 500_000_000n,
+    shortLegValue: 500_000_000n,
+    state: 'ACTIVE',
+  });
+  return pair.id;
+}
+
+/**
+ * Seeds ONE REAL closable demo position through the paper position-service OPEN flow: a LONG for
+ * `PAPER_ELIGIBLE_SUBSCRIBER` on the solo pair, with NO opposing-side holder. A close of it is therefore
+ * a standard whole-package close (Story 8.3) — it passes the §11.4 guardrail and completes OPEN → CLOSED,
+ * demonstrating a successful close live. Idempotent: skips once the owner already holds an OPEN position
+ * on the pair (the open flow is itself idempotent on its key too). Returns true when it opened the position.
+ */
+async function seedSoloClosablePosition(
+  db: RoseDb,
+  soloPairId: string,
+  config: Omit<PaperModeConfig, 'db'>,
+): Promise<boolean> {
+  const owner = getAddress(PAPER_ELIGIBLE_SUBSCRIBER);
+  const held = (await listPositionsByOwner(db, { owner })).some(
+    (p) => p.coupledPairId === soloPairId && p.lifecycle === 'OPEN',
+  );
+  if (held) return false;
+
+  const service = makePaperPositionService({ db, paperConfig: config });
+  await service.openPosition({
+    coupledPairId: soloPairId,
+    owner,
+    side: 'LONG',
+    amount: PAPER_DEMO_POSITION_AMOUNT,
+    paymentAsset: config.paymentAsset,
+    idempotencyKey: `seed-demo-open-solo-${soloPairId}`,
+  });
+  console.log(
+    `[seed] paper-mode closable demo position ready — LONG ${owner} on solo pair ${soloPairId} ` +
+      '(no opposing holder; a close completes the whole-package burn — Story 8.3).',
+  );
+  return true;
+}
+
+/**
  * Seeds everything the PAPER-MODE write flows need and returns the resolved composition config (the
  * `PaperModeConfig` minus `db`): the demo coupled pair / Rose Note, the EUR + ROSE_L/ROSE_S typed
  * accounts, an initial minted position to redeem/reset against, the eligible-subscriber allowlist (two
@@ -317,6 +382,11 @@ export async function seedPaperDemo(db: RoseDb): Promise<Omit<PaperModeConfig, '
   // Seed the two REAL demo positions (LONG + opposing SHORT) so the §11.4 single-side-close guardrail
   // is exercisable live. Uses the SAME paper position-service open flow the API exposes.
   await seedPaperDemoPositions(db, pairId, config);
+
+  // Seed a SECOND pair with a single-owner LONG (no opposing holder) so a SUCCESSFUL whole-package
+  // close (Story 8.3) is demonstrable live — the companion to the guardrail-refused close above.
+  const soloPairId = await seedSoloPair(db);
+  await seedSoloClosablePosition(db, soloPairId, config);
 
   return config;
 }
