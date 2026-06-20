@@ -12,6 +12,8 @@ import type {
   ClosePositionView,
   CoupledPairResponse,
   GroupViewResponse,
+  OnboardingRequest,
+  OnboardingState,
   OpenPositionRequest,
   OpenPositionView,
   PositionReconciliationReport,
@@ -245,6 +247,42 @@ export function useUpdateSimulationSettings(): UseMutationResult<
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['simulation-settings'] }),
+        queryClient.invalidateQueries({ queryKey: ['positions'] }),
+      ]);
+    },
+  });
+}
+
+// ─── Faithful KYC/AML onboarding (Story 9.2, FR-29) ──────────────────────────────────────────────
+
+/**
+ * Live KYC/AML onboarding state for an address (faithful mode). A non-faithful deployment surfaces a
+ * typed 503 `FAITHFUL_ONBOARDING_UNAVAILABLE` the control NAMES (shows a "faithful-mode only" note).
+ * Disabled when no address is wired (e.g. an empty `VITE_SUBSCRIBER_ADDRESS`).
+ */
+export function useOnboardingState(address: string): UseQueryResult<OnboardingState, Error> {
+  const client = useApiClient();
+  return useQuery({
+    queryKey: ['onboarding', address],
+    queryFn: () => client.getOnboardingState(address),
+    enabled: address.length > 0,
+    retry: false,
+  });
+}
+
+/**
+ * Onboard / revoke an address in the faithful-mode mock KYC/AML registry. On success the address's
+ * onboarding state AND the live positions (eligibility-dependent) are invalidated. A 400/503 surfaces
+ * as a typed `ApiClientError` the control NAMES (UX-DR5).
+ */
+export function useSetOnboarding(): UseMutationResult<OnboardingState, Error, OnboardingRequest> {
+  const client = useApiClient();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (body) => client.setOnboarding(body),
+    onSuccess: async (state) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['onboarding', state.address] }),
         queryClient.invalidateQueries({ queryKey: ['positions'] }),
       ]);
     },

@@ -32,6 +32,7 @@ import {
   useReconcilePositions,
 } from '../../lib/queries.js';
 import { ChartPlaceholder } from './chart-placeholder.js';
+import { KycOnboardingControl } from './kyc-onboarding.js';
 import { MarketList } from './market-list.js';
 import { PayoffChart } from './payoff-chart.js';
 import { OrderTicket } from './order-ticket.js';
@@ -383,8 +384,11 @@ export function ExchangeTradingView({
             </div>
           </div>
 
-          <div className={cn(PANEL, 'min-w-0')}>
-            <OrderTicket pair={marketPair} owner={owner} onNavigate={onNavigate} />
+          <div className="flex min-w-0 flex-col gap-4">
+            <KycOnboardingControl address={owner ?? ''} />
+            <div className={cn(PANEL, 'min-w-0')}>
+              <OrderTicket pair={marketPair} owner={owner} onNavigate={onNavigate} />
+            </div>
           </div>
         </div>
       )}

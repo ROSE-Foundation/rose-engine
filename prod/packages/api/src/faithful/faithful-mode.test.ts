@@ -16,7 +16,7 @@ import {
   type RoseDb,
 } from '@rose/ledger';
 import { listPositionsByOwner } from '@rose/positions';
-import { makePaperModeServices } from '@rose/rose-note';
+import { IneligibleSubscriberError, makePaperModeServices } from '@rose/rose-note';
 import { getAddress } from 'viem';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { makeFaithfulConfirmationSettingsStore } from './confirmation-settings.js';
@@ -26,6 +26,7 @@ import {
   type ManualScheduler,
 } from './confirmation-transport.js';
 import { makeFaithfulModeServices, makeFaithfulPositionService } from './faithful-mode.js';
+import { makeMockKycRegistry, type MockKycRegistry } from './kyc-registry.js';
 import { seedPaperDemo } from '../seed-demo.js';
 
 const ALICE = getAddress('0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa');
@@ -37,6 +38,7 @@ let config: Awaited<ReturnType<typeof seedPaperDemo>>;
 let scheduler: ManualScheduler;
 let settings: ReturnType<typeof makeFaithfulConfirmationSettingsStore>;
 let transport: FaithfulConfirmationTransport;
+let kycRegistry: MockKycRegistry;
 let services: ReturnType<typeof makeFaithfulModeServices>;
 let positions: ReturnType<typeof makeFaithfulPositionService>;
 let demoNoteId: string;
@@ -89,8 +91,10 @@ beforeAll(async () => {
   scheduler = makeManualScheduler();
   settings = makeFaithfulConfirmationSettingsStore();
   transport = new FaithfulConfirmationTransport({ db, scheduler, settings });
-  services = makeFaithfulModeServices({ db, ...config }, transport);
-  positions = makeFaithfulPositionService({ db, paperConfig: config, transport });
+  // The demo identities (ALICE/CAROL) are seeded ONBOARDED so the Story-9.1 confirmation flows stay green.
+  kycRegistry = makeMockKycRegistry(config.eligibleSubscribers);
+  services = makeFaithfulModeServices({ db, ...config }, transport, kycRegistry);
+  positions = makeFaithfulPositionService({ db, paperConfig: config, transport, kycRegistry });
 });
 
 afterAll(async () => {
@@ -289,6 +293,90 @@ describe('failureRate — a 100% rate fails every flow (AC2)', () => {
     const row = await findByIdempotencyKey(db, key);
     expect(row!.status).toBe('COMPENSATED');
     settings.reset();
+  });
+});
+
+// Story 9.2 — the REAL default-deny + KYC gate is live in the faithful composition. DAVE is a FRESH
+// address NOT in the seeded eligible set, so he is un-onboarded until the registry onboards him.
+const DAVE = getAddress('0xdddddddddddddddddddddddddddddddddddddddd');
+
+describe('faithful default-deny + KYC gate — subscribe (Story 9.2 AC1/AC2/AC3)', () => {
+  it('un-onboarded ⇒ REFUSED (IneligibleSubscriberError, the named 403 reason)', async () => {
+    expect(kycRegistry.isOnboarded(DAVE)).toBe(false);
+    await expect(
+      services.subscriptions.subscribe({
+        roseNoteId: demoNoteId,
+        subscriber: DAVE,
+        amount: 1_000_000n,
+        paymentAsset: config.paymentAsset,
+        idempotencyKey: 'kyc-sub-denied',
+      }),
+    ).rejects.toBeInstanceOf(IneligibleSubscriberError);
+  });
+
+  it('onboarded ⇒ AUTHORIZED, the same action proceeds (pending → scheduled commit point)', async () => {
+    kycRegistry.onboard(DAVE);
+    const view = await services.subscriptions.subscribe({
+      roseNoteId: demoNoteId,
+      subscriber: DAVE,
+      amount: 1_000_000n,
+      paymentAsset: config.paymentAsset,
+      idempotencyKey: 'kyc-sub-allowed',
+    });
+    expect(view.status).toBe('pending');
+    expect(view.txHash).not.toBeNull();
+    await scheduler.runAll();
+    const after = await services.subscriptions.getSubscription('kyc-sub-allowed');
+    expect(after!.status).toBe('confirmed');
+  });
+
+  it('REVOKED ⇒ re-denied (revocation honoured — the gate is live, not one-time)', async () => {
+    kycRegistry.revoke(DAVE);
+    await expect(
+      services.subscriptions.subscribe({
+        roseNoteId: demoNoteId,
+        subscriber: DAVE,
+        amount: 1_000_000n,
+        paymentAsset: config.paymentAsset,
+        idempotencyKey: 'kyc-sub-redenied',
+      }),
+    ).rejects.toBeInstanceOf(IneligibleSubscriberError);
+  });
+});
+
+describe('faithful default-deny + KYC gate — position open (Story 9.2 AC1/AC2/AC3)', () => {
+  let kycOpenPairId: string;
+
+  it('un-onboarded owner ⇒ position-open REFUSED', async () => {
+    kycOpenPairId = await freshActivePair('FAITHFUL/KYC-OPEN');
+    expect(kycRegistry.isOnboarded(DAVE)).toBe(false); // DAVE was revoked above
+    await expect(
+      positions.openPosition({
+        coupledPairId: kycOpenPairId,
+        owner: DAVE,
+        side: 'LONG',
+        amount: 100_000_000n,
+        paymentAsset: config.paymentAsset,
+        idempotencyKey: 'kyc-open-denied',
+      }),
+    ).rejects.toBeInstanceOf(IneligibleSubscriberError);
+  });
+
+  it('onboarded owner ⇒ position-open proceeds then confirms an OPEN position', async () => {
+    kycRegistry.onboard(DAVE);
+    const view = await positions.openPosition({
+      coupledPairId: kycOpenPairId,
+      owner: DAVE,
+      side: 'LONG',
+      amount: 100_000_000n,
+      paymentAsset: config.paymentAsset,
+      idempotencyKey: 'kyc-open-allowed',
+    });
+    expect(view.status).toBe('pending');
+    await scheduler.runAll();
+    const after = await positions.getOpenPosition('kyc-open-allowed');
+    expect(after!.status).toBe('confirmed');
+    expect(after!.position!.lifecycle).toBe('OPEN');
   });
 });
 

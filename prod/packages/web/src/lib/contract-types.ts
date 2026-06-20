@@ -4,6 +4,8 @@
 import type {
   CoupledPairResponse,
   GroupViewResponse,
+  OnboardingRequest,
+  OnboardingState,
   PositionMarkResponse,
   PositionResponse,
   PositionsResponse,
@@ -17,6 +19,8 @@ import type {
 export type {
   CoupledPairResponse,
   GroupViewResponse,
+  OnboardingRequest,
+  OnboardingState,
   PositionMarkResponse,
   PositionResponse,
   PositionsResponse,

@@ -44,6 +44,7 @@ import {
   makeFaithfulModeServices,
   makeFaithfulPositionService,
 } from './faithful/faithful-mode.js';
+import { makeMockKycRegistry } from './faithful/kyc-registry.js';
 import { makePaperPositionService } from './paper-position-service.js';
 import { makePaperReplayOracle } from './paper-replay-oracle.js';
 import { seedPaperDemo } from './seed-demo.js';
@@ -316,8 +317,19 @@ async function main(): Promise<void> {
       scheduler: realScheduler,
       settings: confirmationSettings,
     });
-    const faithful = makeFaithfulModeServices({ db, ...paperConfig }, transport);
-    const positionService = makeFaithfulPositionService({ db, paperConfig, transport });
+    // ONE mock KYC/AML onboarding registry (Story 9.2, FR-29) — the DEMO ONCHAINID claim issuer the
+    // REAL default-deny authorization gate + the FR-19 token-receipt eligibility are BOTH derived from.
+    // Seed the existing demo identities as ONBOARDED so the seeded demo (subscribe/open + the §11.4
+    // topology) works out of the box; the gate is then demonstrable by revoking a seeded identity or
+    // onboarding a fresh address (POST /faithful/onboarding).
+    const kycRegistry = makeMockKycRegistry(paperConfig.eligibleSubscribers);
+    const faithful = makeFaithfulModeServices({ db, ...paperConfig }, transport, kycRegistry);
+    const positionService = makeFaithfulPositionService({
+      db,
+      paperConfig,
+      transport,
+      kycRegistry,
+    });
     // The price oracle (Lever 1 replay) + simulation settings + read surfaces stay EXACTLY as in paper —
     // faithful only time-shifts the confirmation commit point and can inject failures.
     const simulationSettings = makeSimulationSettingsStore();
@@ -332,11 +344,15 @@ async function main(): Promise<void> {
       simulationSettings,
       priceOracle: makePaperReplayOracle(db, { settings: () => simulationSettings.get() }),
       markTrust: PAPER_MARK_TRUST,
+      // Expose the mock KYC registry so the faithful-gated onboarding route can drive it (Story 9.2).
+      kycRegistry,
     };
     console.log(
       '[serve] faithful mode ACTIVE — subscribe/redeem/strategy + position open/close are fully ' +
         'interactive; the on-chain confirmation is ASYNC (configurable latency) and can be made to ' +
-        'FAIL → saga compensation (no half-applied state). All SIMULATED in-process (no Sepolia, no secret).',
+        'FAIL → saga compensation (no half-applied state); capital movement is gated by the REAL ' +
+        'default-deny authorization fronted by a MOCKED KYC/AML onboarding (POST /faithful/onboarding) ' +
+        '— demo identities seeded onboarded. All SIMULATED in-process (no Sepolia, no secret).',
     );
   } else {
     console.log(

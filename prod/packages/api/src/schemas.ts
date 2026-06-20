@@ -812,3 +812,40 @@ export const SimulationSettingsUpdateSchema = z
     dcThreshold: z.number().optional(),
   })
   .describe('Patch the paper replay-feed parameters (any subset).');
+
+// ─── Faithful KYC/AML onboarding (Story 9.2, FR-29) ──────────────────────────────────────────────
+// The faithful-mode mock ONCHAINID claim issuer's control surface. Composed ONLY when the KYC registry
+// is wired (ENGINE_MODE=faithful); a non-faithful deployment returns a typed 503.
+
+/** The `:address` path parameter for an onboarding-state read — validated as a 20-byte EVM address. */
+export const OnboardingAddressParamSchema = z.object({
+  address: EVM_ADDRESS.describe('The EVM address whose onboarding state is read.'),
+});
+
+/** The body of `POST /faithful/onboarding`: the subject address + the action to apply (fail-closed). */
+export const OnboardingRequestSchema = z
+  .object({
+    address: EVM_ADDRESS.describe('The EVM address to onboard or revoke (EIP-55 normalised).'),
+    action: z
+      .enum(['onboard', 'revoke'])
+      .describe("'onboard' issues the mocked KYC/AML eligibility claim; 'revoke' removes it."),
+  })
+  .describe('Drive the faithful mock KYC/AML onboarding for one address.');
+
+/** The onboarding state of one address: the EIP-55 address, whether onboarded, and the monotonic version. */
+export const OnboardingStateSchema = z
+  .object({
+    address: EVM_ADDRESS.describe('The EIP-55 checksum address the state is reported for.'),
+    onboarded: z
+      .boolean()
+      .describe('Whether the mocked KYC/AML onboarding has issued (and not revoked) a claim.'),
+    version: z
+      .number()
+      .int()
+      .describe('The registry monotonic version (bumps on every state change).'),
+  })
+  .describe('The mocked KYC/AML onboarding state for one address.');
+
+/** The inferred wire types for the onboarding surface. */
+export type OnboardingRequest = z.infer<typeof OnboardingRequestSchema>;
+export type OnboardingState = z.infer<typeof OnboardingStateSchema>;

@@ -3,6 +3,8 @@ import type {
   ClosePositionView,
   CoupledPairResponse,
   GroupViewResponse,
+  OnboardingRequest,
+  OnboardingState,
   OpenPositionRequest,
   OpenPositionView,
   PositionReconciliationReport,
@@ -75,6 +77,16 @@ export interface ApiClient {
    * with a typed 400 `SimulationSettingsError`; a non-paper deployment refuses with a 503.
    */
   updateSimulationSettings(patch: SimulationSettingsUpdate): Promise<SimulationSettingsView>;
+  /**
+   * Read an address's faithful-mode KYC/AML onboarding state. A non-faithful deployment refuses with a
+   * typed 503 `FAITHFUL_ONBOARDING_UNAVAILABLE` the surface NAMES (the control shows a faithful-only note).
+   */
+  getOnboardingState(address: string): Promise<OnboardingState>;
+  /**
+   * Onboard or revoke an address in the faithful-mode mock KYC/AML registry. A malformed address ⇒ 400;
+   * a non-faithful deployment ⇒ 503.
+   */
+  setOnboarding(body: OnboardingRequest): Promise<OnboardingState>;
 }
 
 /** The structured error envelope the boundary returns (`{ error: { code, message } }`). */
@@ -166,6 +178,9 @@ export function createApiClient({
     getSimulationSettings: () => get<SimulationSettingsView>('/simulation/settings'),
     updateSimulationSettings: (patch: SimulationSettingsUpdate) =>
       put<SimulationSettingsView>('/simulation/settings', patch),
+    getOnboardingState: (address: string) =>
+      get<OnboardingState>(`/faithful/onboarding/${enc(address)}`),
+    setOnboarding: (body: OnboardingRequest) => post<OnboardingState>('/faithful/onboarding', body),
   };
 }
 

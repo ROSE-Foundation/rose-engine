@@ -89,6 +89,8 @@ const ERROR_REGISTRY: Readonly<Record<string, Mapping>> = Object.freeze({
   BurnAuthorizationError: { status: 422 },
   // Simulation settings (paper-mode replay feed): an out-of-range/non-finite parameter patch.
   SimulationSettingsError: { status: 400 },
+  // Faithful KYC/AML onboarding (Story 9.2): a malformed address handed to the mock registry (fail-closed).
+  InvalidKycAddressError: { status: 400 },
   MintQuantityDivergenceError: { status: 422 },
   BurnQuantityDivergenceError: { status: 422 },
   ConformanceFailureError: { status: 422 },

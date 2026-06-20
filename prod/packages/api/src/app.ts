@@ -20,8 +20,10 @@ import {
   type ZodTypeProvider,
 } from 'fastify-type-provider-zod';
 import { mapErrorToResponse } from './errors.js';
+import type { MockKycRegistry } from './faithful/kyc-registry.js';
 import type { SimulationSettingsStore } from './simulation-settings.js';
 import { coupledPairRoutes } from './routes/coupled-pairs.js';
+import { faithfulOnboardingRoutes } from './routes/faithful-onboarding.js';
 import { groupViewRoutes } from './routes/group-view.js';
 import { healthRoutes } from './routes/health.js';
 import { openApiRoutes } from './routes/openapi.js';
@@ -107,6 +109,13 @@ export interface ApiDeps {
    * /simulation/settings`; absent on a read-only / non-paper deployment ⇒ those routes are a typed 503.
    */
   readonly simulationSettings?: SimulationSettingsStore;
+  /**
+   * Optional faithful-mode mock KYC/AML onboarding registry (Story 9.2, FR-29) — the DEMO ONCHAINID
+   * claim issuer the default-deny authorization gate + the FR-19 token-receipt eligibility are derived
+   * from. Drives `POST/GET /faithful/onboarding`; absent on a non-faithful / read-only deployment ⇒
+   * those routes are a typed 503 (refuse-if-absent). Injected port (NFR-8).
+   */
+  readonly kycRegistry?: MockKycRegistry;
   /** Optional OpenAPI metadata override. */
   readonly openApiInfo?: OpenApiInfo;
   /** Optional Fastify logger toggle (defaults off — tests stay quiet). */
@@ -230,6 +239,7 @@ export async function buildApp(deps: ApiDeps, ext?: BuildAppExtensions): Promise
   await app.register(redemptionRoutes(deps));
   await app.register(strategyRoutes(deps));
   await app.register(simulationRoutes(deps));
+  await app.register(faithfulOnboardingRoutes(deps));
 
   await app.ready();
   return app;

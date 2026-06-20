@@ -41,11 +41,34 @@ export {
 // bundle). Additive, runtime-inert.
 export type {
   GroupViewResponse,
+  OnboardingRequest,
+  OnboardingState,
   PositionsResponse,
   RedeemRequest,
   RedemptionResponse,
   SubscribeRequest,
   SubscriptionResponse,
+} from './schemas.js';
+
+// Faithful-mode mock KYC/AML onboarding (Story 9.2, FR-29): the registry seam + its onboarding schemas.
+export {
+  makeMockKycRegistry,
+  InvalidKycAddressError,
+  type MockKycRegistry,
+  type KycOnboardingState,
+} from './faithful/kyc-registry.js';
+export {
+  makeKycAuthorizationGate,
+  makeKycEligibilityProvider,
+  decideKycAuthorization,
+  runWithKycContext,
+  KYC_DEFAULT_DENY_RULE,
+  type KycAuthorizationContext,
+} from './faithful/faithful-authorization.js';
+export {
+  OnboardingAddressParamSchema,
+  OnboardingRequestSchema,
+  OnboardingStateSchema,
 } from './schemas.js';
 
 export {

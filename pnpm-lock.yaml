@@ -50,6 +50,9 @@ importers:
       '@fastify/swagger':
         specifier: ^9.7.0
         version: 9.7.0
+      '@rose/authorization':
+        specifier: workspace:*
+        version: link:../authorization
       '@rose/chain':
         specifier: workspace:*
         version: link:../chain

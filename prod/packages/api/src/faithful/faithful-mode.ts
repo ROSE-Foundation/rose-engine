@@ -26,7 +26,6 @@ import {
 } from '@rose/chain';
 import { findByIdempotencyKey, type RoseDb } from '@rose/ledger';
 import {
-  makeAllowlistEligibilityProvider,
   makeRedemptionService,
   makeStrategyExecutor,
   makeSubscriptionService,
@@ -46,6 +45,12 @@ import {
 } from '@rose/positions';
 import { getAddress, type Address, type Hex } from 'viem';
 import type { FaithfulConfirmationTransport } from './confirmation-transport.js';
+import {
+  makeKycAuthorizationGate,
+  makeKycEligibilityProvider,
+  runWithKycContext,
+} from './faithful-authorization.js';
+import type { MockKycRegistry } from './kyc-registry.js';
 
 /**
  * A concise, honest boot banner naming what is real vs mocked for the async-confirmation layer (the
@@ -56,22 +61,19 @@ export const FAITHFUL_MODE_BANNER =
   'FAITHFUL MODE — production-faithful demo (testnet/paper, NO real capital). REAL: ledger + ' +
   'outbox/saga commit-point & compensation. MOCKED: on-chain confirmation latency + injectable failure.';
 
-/** Faithful authorization: a clearly-labelled ALLOW (9.2 will replace this with the real default-deny gate). */
-const faithfulAuthorizeAllow = () =>
-  ({
-    effect: 'ALLOW',
-    reason: 'faithful-mode: simulated authorization (real default-deny gate arrives in Story 9.2)',
-  }) as const;
-
 /**
  * Builds the faithful subscribe/redeem/strategy write services. Mirrors `makePaperModeServices` but
- * schedules each commit point through the `FaithfulConfirmationTransport` (delayed + failure-injectable)
- * instead of confirming instantly in-process. Returns the SAME `PaperModeServices` shape so the API
- * boundary composes it identically.
+ * (1) schedules each commit point through the `FaithfulConfirmationTransport` (delayed + failure
+ * -injectable, Story 9.1) instead of confirming instantly in-process, and (2) gates capital movement on
+ * the REAL default-deny + KYC authorization (Story 9.2): the `authorize` gate + the FR-19 token-receipt
+ * `EligibilityProvider` are BOTH derived from the injected `MockKycRegistry`, and each write runs inside
+ * a KYC subject/operation context so the zero-arg gate decides on the right subject. Returns the SAME
+ * `PaperModeServices` shape so the API boundary composes it identically.
  */
 export function makeFaithfulModeServices(
   config: PaperModeConfig,
   transport: FaithfulConfirmationTransport,
+  kycRegistry: MockKycRegistry,
 ): PaperModeServices {
   const { db } = config;
   const pairAddress: Address = PAPER_PAIR_ADDRESS;
@@ -80,13 +82,17 @@ export function makeFaithfulModeServices(
   const saga = new OutboxSaga({ db });
   const mint = new MintPairDualWrite({ saga, clients, account });
   const burn = new BurnPairDualWrite({ saga, clients, account });
+  // ONE KYC gate + ONE KYC-derived eligibility provider, shared across the write services (NFR-8).
+  const authorize = makeKycAuthorizationGate(kycRegistry);
+  const eligibility = makeKycEligibilityProvider(kycRegistry);
+  const positionHolderAddress = getAddress(config.positionHolder) as Address;
 
   const innerSubscriptions = makeSubscriptionService({
     db,
     mint,
     pairAddress,
-    eligibility: makeAllowlistEligibilityProvider(config.eligibleSubscribers),
-    authorize: faithfulAuthorizeAllow,
+    eligibility,
+    authorize,
     topology: config.subscriptionTopology,
     paymentAsset: config.paymentAsset,
   });
@@ -95,7 +101,7 @@ export function makeFaithfulModeServices(
     db,
     burn,
     pairAddress,
-    authorize: faithfulAuthorizeAllow,
+    authorize,
     topology: config.redemptionTopology,
     paymentAsset: config.paymentAsset,
   });
@@ -104,10 +110,10 @@ export function makeFaithfulModeServices(
     db,
     burn,
     pairAddress,
-    authorize: faithfulAuthorizeAllow,
+    authorize,
     topology: config.strategyTopology,
     paymentAsset: config.paymentAsset,
-    positionHolder: getAddress(config.positionHolder) as Address,
+    positionHolder: positionHolderAddress,
     floor: config.floor,
   });
 
@@ -117,7 +123,10 @@ export function makeFaithfulModeServices(
 
   const subscriptions: SubscriptionService = {
     async subscribe(input) {
-      const view = await innerSubscriptions.subscribe(input);
+      // Capital-IN: gate receipt + authorization on the subscriber's KYC onboarding (default-deny).
+      const view = await runWithKycContext({ subject: input.subscriber, capitalIn: true }, () =>
+        innerSubscriptions.subscribe(input),
+      );
       // Schedule the DELAYED commit point. The synthetic PairMinted mirrors the recorded intent exactly
       // as the paper wrapper does (subscriber receives BOTH legs; on-chain amount == intent amount), so
       // the 5.3 divergence cross-checks pass at the (time-shifted) commit point. The returned view stays
@@ -152,7 +161,10 @@ export function makeFaithfulModeServices(
 
   const redemptions: RedemptionService = {
     async redeem(input) {
-      const view = await innerRedemptions.redeem(input);
+      // Capital-OUT (exit): authorized regardless of onboarding (governed by lifecycle/§11.4, not KYC).
+      const view = await runWithKycContext({ subject: input.redeemer, capitalIn: false }, () =>
+        innerRedemptions.redeem(input),
+      );
       if (view.status === 'pending' && view.txHash !== null) {
         const txHash = view.txHash;
         const event: PairBurnedEvent = {
@@ -182,7 +194,11 @@ export function makeFaithfulModeServices(
 
   const strategy: StrategyExecutor = {
     async onTick(tick) {
-      const outcome = await innerStrategy.onTick(tick);
+      // Capital-OUT (the reset retires the holder's paired legs): an exit, authorized regardless of KYC.
+      const outcome = await runWithKycContext(
+        { subject: positionHolderAddress, capitalIn: false },
+        () => innerStrategy.onTick(tick),
+      );
       // Schedule the DELAYED reset commit point. The outcome carries no on-chain args, so — exactly as
       // the paper wrapper does — reconstruct the confirmed PairBurned from the recorded SUBMITTED outbox
       // intent (the holder legs + reset amount), guaranteeing the commit-point cross-checks pass.
@@ -238,6 +254,8 @@ export interface MakeFaithfulPositionServiceInput {
   readonly db: RoseDb;
   readonly paperConfig: Omit<PaperModeConfig, 'db'>;
   readonly transport: FaithfulConfirmationTransport;
+  /** The mock KYC registry the open authorization gate + token-receipt eligibility are derived from. */
+  readonly kycRegistry: MockKycRegistry;
 }
 
 /**
@@ -250,7 +268,7 @@ export interface MakeFaithfulPositionServiceInput {
 export function makeFaithfulPositionService(
   input: MakeFaithfulPositionServiceInput,
 ): PositionService {
-  const { db, paperConfig, transport } = input;
+  const { db, paperConfig, transport, kycRegistry } = input;
   const pairAddress: Address = PAPER_PAIR_ADDRESS;
   const clients = createPaperChainClients();
   const account = makePaperAccount();
@@ -264,8 +282,9 @@ export function makeFaithfulPositionService(
     mint,
     burn,
     pairAddress,
-    eligibility: makeAllowlistEligibilityProvider(paperConfig.eligibleSubscribers),
-    authorize: faithfulAuthorizeAllow,
+    // The OPEN (mint receipt) eligibility + the capital-flow authorization gate, BOTH over the KYC registry.
+    eligibility: makeKycEligibilityProvider(kycRegistry),
+    authorize: makeKycAuthorizationGate(kycRegistry),
     openTopology: paperConfig.subscriptionTopology,
     closeTopology: paperConfig.redemptionTopology,
     paymentAsset: paperConfig.paymentAsset,
@@ -277,7 +296,10 @@ export function makeFaithfulPositionService(
 
   const service: PositionService = {
     async openPosition(open: OpenPositionInput): Promise<OpenPositionView> {
-      const view = await inner.openPosition(open);
+      // Capital-IN: gate receipt + authorization on the owner's KYC onboarding (default-deny).
+      const view = await runWithKycContext({ subject: open.owner, capitalIn: true }, () =>
+        inner.openPosition(open),
+      );
       if (view.status === 'pending' && view.txHash !== null) {
         const txHash = view.txHash;
         const event: PairMintedEvent = {
@@ -308,8 +330,9 @@ export function makeFaithfulPositionService(
     async closePosition(close: ClosePositionInput): Promise<ClosePositionView> {
       // `closePosition` throws `SolvencyGuardrailError` (D1 single-side topology) BEFORE any burn is
       // submitted — let it propagate (the route maps it to a 409). Otherwise it returns PENDING with a
-      // `txHash`; schedule the matching PairBurned commit point through the transport.
-      const view = await inner.closePosition(close);
+      // `txHash`; schedule the matching PairBurned commit point through the transport. Capital-OUT (an
+      // exit): authorized regardless of onboarding (governed by §11.4/lifecycle, not KYC).
+      const view = await runWithKycContext({ capitalIn: false }, () => inner.closePosition(close));
       if (view.status === 'pending' && view.txHash !== null) {
         const txHash = view.txHash;
         const event: PairBurnedEvent = {
